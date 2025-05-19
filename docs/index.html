@@ -1,89 +1,161 @@
-import os
-import csv
-import json
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MTF Data Dashboard</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 2rem;
+    }
+    select, input {
+      margin: 0.5rem;
+      padding: 0.5rem;
+    }
+    .summary, .stock-result {
+      margin-top: 2rem;
+      padding: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>MTF Data Search</h1>
 
-data_dir = "fetch_mtf/data/extracted"
-output = {}
+  <label for="yearSelect">Year:</label>
+  <select id="yearSelect"></select>
 
-for root, dirs, files in os.walk(data_dir):
-    for file in files:
-        if file.endswith(".csv"):
-            year = os.path.basename(os.path.dirname(root))
-            if year not in output:
-                output[year] = {}
-            file_path = os.path.join(root, file)
-            with open(file_path, encoding="utf-8") as f:
-                reader = csv.reader(f)
-                rows = list(reader)
-                
-                report_line = rows[0][0]
-                if "Reporting date" in report_line:
-                    date_str = report_line.split("Reporting date")[-1].strip()
-                else:
-                    continue
+  <label for="monthSelect">Month:</label>
+  <select id="monthSelect"></select>
 
-                date_key = f"{date_str}"
-                if date_key not in output[year]:
-                    output[year][date_key] = {
-                        "summary": [],
-                        "stocks": {}
-                    }
+  <label for="dateSelect">Date:</label>
+  <select id="dateSelect"></select>
 
-                # Summary section (rows 2–5)
-                # Summary section (rows 4 to 7)
-                summary_rows = []
-                for i in range(4, 8):
-                    try:
-                        part = rows[i][1].strip()
-                        amount_lakhs = float(rows[i][2].replace(",", "").strip())
-                        amount_crores = round(amount_lakhs / 100, 2)
-                        summary_rows.append({
-                            "particular": part,
-                            "amount_crores": amount_crores
-                        })
-                    except (IndexError, ValueError):
-                        continue
+  <br/>
 
-                # Only include summary if at least one value is non-zero
-                if any(row["amount_crores"] > 0 for row in summary_rows):
-                    output[year][date_key]["summary"] = summary_rows
-                else:
-                    output[year][date_key]["summary"] = []
+  <label for="stockInput">Search Stock:</label>
+  <input list="stockList" id="stockInput" placeholder="Enter stock name"/>
+  <datalist id="stockList"></datalist>
 
+  <div class="summary" id="summaryBox">
+    <h3>Summary</h3>
+    <ul id="summaryList"></ul>
+  </div>
 
-                # Find stock section
-                stock_start_index = None
-                for i, row in enumerate(rows):
-                    if row and row[0].strip().lower() == "symbol":
-                        stock_start_index = i + 1
-                        break
+  <div class="stock-result" id="stockBox">
+    <h3>Stock Details</h3>
+    <p><strong>Stock:</strong> <span id="stockName"></span></p>
+    <p><strong>Summary:</strong> <span id="stockSummary"></span></p>
+    <p><strong>Qty Fin (Cr):</strong> <span id="stockC"></span></p>
+    <p><strong>Amt Fin (Cr):</strong> <span id="stockD"></span></p>
+  </div>
 
-                if stock_start_index is None:
-                    continue
+  <script>
+    let mtfData = {};
 
-                # Stock rows
-                for row in rows[stock_start_index:]:
-                    if len(row) < 4:
-                        continue
-                    stock = row[0].strip()
-                    summary = row[1].strip()
-                    try:
-                        Quantity_in_crores = float(row[2].replace(",", "")) / 100
-                        Amount_in_crores = float(row[3].replace(",", "")) / 100
-                    except ValueError:
-                        continue
+    async function loadData() {
+      const res = await fetch('mtf_data.json');
+      mtfData = await res.json();
+      populateYearDropdown();
+    }
 
-                    if stock not in output[year][date_key]["stocks"]:
-                        output[year][date_key]["stocks"][stock] = {
-                            "summary": summary,
-                            "Quantity_in_crores": 0,
-                            "Amount_in_crores": 0
-                        }
-                    output[year][date_key]["stocks"][stock]["Quantity_in_crores"] += Quantity_in_crores
-                    output[year][date_key]["stocks"][stock]["Amount_in_crores"] += Amount_in_crores
+    function populateYearDropdown() {
+      const yearSelect = document.getElementById('yearSelect');
+      yearSelect.innerHTML = `<option value="">--Select Year--</option>`;
+      for (let year of Object.keys(mtfData).sort()) {
+        yearSelect.innerHTML += `<option value="${year}">${year}</option>`;
+      }
+    }
 
-# Save the final JSON
-os.makedirs("docs", exist_ok=True)
-with open("docs/mtf_data.json", "w", encoding="utf-8") as f:
-    json.dump(output, f, indent=2)
+    function populateMonthAndDateDropdowns(year) {
+      const monthSelect = document.getElementById('monthSelect');
+      const dateSelect = document.getElementById('dateSelect');
+      monthSelect.innerHTML = `<option value="">--Select Month--</option>`;
+      dateSelect.innerHTML = `<option value="">--Select Date--</option>`;
 
+      const monthMap = {};
+      const dates = Object.keys(mtfData[year]);
+
+      for (let d of dates) {
+        const parts = d.split("-");
+        const month = parts[1].toUpperCase();
+        if (!monthMap[month]) monthMap[month] = [];
+        monthMap[month].push(d);
+      }
+
+      for (let month of Object.keys(monthMap).sort()) {
+        monthSelect.innerHTML += `<option value="${month}">${month}</option>`;
+      }
+
+      monthSelect.onchange = () => {
+        const selectedMonth = monthSelect.value;
+        dateSelect.innerHTML = `<option value="">--Select Date--</option>`;
+        if (selectedMonth) {
+          for (let d of monthMap[selectedMonth]) {
+            dateSelect.innerHTML += `<option value="${d}">${d}</option>`;
+          }
+        }
+      };
+    }
+
+    function populateStockList(year, date) {
+      const stockList = document.getElementById('stockList');
+      const stocks = Object.keys(mtfData[year][date].stocks || {});
+      stockList.innerHTML = '';
+      for (let stock of stocks) {
+        const option = document.createElement('option');
+        option.value = stock;
+        stockList.appendChild(option);
+      }
+    }
+
+    function showSummary(year, date) {
+      const summaryBox = document.getElementById('summaryList');
+      const summaryData = mtfData[year][date].summary || [];
+      summaryBox.innerHTML = '';
+      for (let row of summaryData) {
+        summaryBox.innerHTML += `<li>${row.particular}: ₹${row.amount_crores} Cr</li>`;
+      }
+    }
+
+    function showStockDetails(year, date, stockName) {
+      const stock = mtfData[year][date].stocks[stockName];
+      if (!stock) return;
+
+      document.getElementById('stockName').textContent = stockName;
+      document.getElementById('stockSummary').textContent = stock.summary;
+      document.getElementById('stockC').textContent = stock.total_c.toFixed(2);
+      document.getElementById('stockD').textContent = stock.total_d.toFixed(2);
+    }
+
+    document.getElementById('yearSelect').addEventListener('change', function () {
+      const year = this.value;
+      if (year) {
+        populateMonthAndDateDropdowns(year);
+      }
+    });
+
+    document.getElementById('dateSelect').addEventListener('change', function () {
+      const year = document.getElementById('yearSelect').value;
+      const date = this.value;
+      if (year && date) {
+        populateStockList(year, date);
+        showSummary(year, date);
+      }
+    });
+
+    document.getElementById('stockInput').addEventListener('input', function () {
+      const stockName = this.value;
+      const year = document.getElementById('yearSelect').value;
+      const date = document.getElementById('dateSelect').value;
+      if (year && date && stockName) {
+        showStockDetails(year, date, stockName);
+      }
+    });
+
+    loadData();
+  </script>
+</body>
+</html>
