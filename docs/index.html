@@ -1,95 +1,90 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>MTF Stock Summary</title>
-  <style>
-    body { font-family: sans-serif; padding: 20px; }
-    select, input { padding: 8px; margin: 10px 0; width: 100%; max-width: 400px; }
-    .summary { margin-top: 20px; }
-    ul.suggestions { list-style: none; padding: 0; border: 1px solid #ccc; max-height: 150px; overflow-y: auto; }
-    ul.suggestions li { padding: 5px; cursor: pointer; }
-    ul.suggestions li:hover { background-color: #f0f0f0; }
-  </style>
-</head>
-<body>
-  <h1>MTF Stock Summary Viewer</h1>
+import os
+import csv
+import json
 
-  <label for="yearSelect">Select Year:</label>
-  <select id="yearSelect"></select>
+data_dir = "fetch_mtf/data/extracted"
+output = {}
 
-  <label for="stockSearch">Search Stock:</label>
-  <input type="text" id="stockSearch" placeholder="Enter stock name..." autocomplete="off"/>
-  <ul id="suggestions" class="suggestions"></ul>
+for root, dirs, files in os.walk(data_dir):
+    for file in files:
+        if file.endswith(".csv"):
+            year = os.path.basename(os.path.dirname(root))
+            if year not in output:
+                output[year] = {}
+            file_path = os.path.join(root, file)
+            with open(file_path, encoding="utf-8") as f:
+                reader = csv.reader(f)
+                rows = list(reader)
+                
+                report_line = rows[0][0]
+                if "Reporting date" in report_line:
+                    date_str = report_line.split("Reporting date")[-1].strip()
+                else:
+                    continue
 
-  <div class="summary" id="summaryBox"></div>
+                date_key = f"{date_str}"
+                if date_key not in output[year]:
+                    output[year][date_key] = {
+                        "summary": [],
+                        "stocks": {}
+                    }
 
-  <script>
-    let mtfData = {};
-    let currentYear = "";
-    const yearSelect = document.getElementById("yearSelect");
-    const stockSearch = document.getElementById("stockSearch");
-    const suggestionsBox = document.getElementById("suggestions");
-    const summaryBox = document.getElementById("summaryBox");
+                # Summary section (rows 2–5)
+                # Summary section (rows 4 to 7)
+                summary_rows = []
+                for i in range(4, 8):
+                    try:
+                        part = rows[i][1].strip()
+                        amount_lakhs = float(rows[i][2].replace(",", "").strip())
+                        amount_crores = round(amount_lakhs / 100, 2)
+                        summary_rows.append({
+                            "particular": part,
+                            "amount_crores": amount_crores
+                        })
+                    except (IndexError, ValueError):
+                        continue
 
-    fetch("mtf_data.json")
-      .then(response => response.json())
-      .then(data => {
-        mtfData = data;
-        const years = Object.keys(mtfData).sort().reverse();
-        years.forEach(year => {
-          const option = document.createElement("option");
-          option.value = year;
-          option.textContent = year;
-          yearSelect.appendChild(option);
-        });
-        currentYear = years[0];
-        yearSelect.value = currentYear;
-      });
+                # Only include summary if at least one value is non-zero
+                if any(row["amount_crores"] > 0 for row in summary_rows):
+                    output[year][date_key]["summary"] = summary_rows
+                else:
+                    output[year][date_key]["summary"] = []
 
-    yearSelect.addEventListener("change", () => {
-      currentYear = yearSelect.value;
-      stockSearch.value = "";
-      summaryBox.innerHTML = "";
-      suggestionsBox.innerHTML = "";
-    });
 
-    stockSearch.addEventListener("input", () => {
-      const input = stockSearch.value.toUpperCase();
-      suggestionsBox.innerHTML = "";
-      if (!input || !mtfData[currentYear]) return;
+                # Find stock section
+                stock_start_index = None
+                for i, row in enumerate(rows):
+                    if row and row[0].strip().lower() == "symbol":
+                        stock_start_index = i + 1
+                        break
 
-      const matches = Object.keys(mtfData[currentYear]).filter(stock =>
-        stock.includes(input)
-      ).slice(0, 10);
+                if stock_start_index is None:
+                    continue
 
-      matches.forEach(stock => {
-        const li = document.createElement("li");
-        li.textContent = stock;
-        li.addEventListener("click", () => {
-          stockSearch.value = stock;
-          suggestionsBox.innerHTML = "";
-          showSummary(stock);
-        });
-        suggestionsBox.appendChild(li);
-      });
-    });
+                # Stock rows
+                for row in rows[stock_start_index:]:
+                    if len(row) < 4:
+                        continue
+                    stock = row[0].strip()
+                    summary = row[1].strip()
+                    try:
+                        Quantity_in_crores = float(row[2].replace(",", "")) / 100
+                        Amount_in_crores = float(row[3].replace(",", "")) / 100
+                    except ValueError:
+                        continue
 
-    function showSummary(stock) {
-      const data = mtfData[currentYear][stock];
-      if (!data) {
-        summaryBox.innerHTML = `<p>No data found for <strong>${stock}</strong></p>`;
-        return;
-      }
+                    if stock not in output[year][date_key]["stocks"]:
+                        output[year][date_key]["stocks"][stock] = {
+                            "summary": summary,
+                            "Quantity_in_crores": 0,
+                            "Amount_in_crores": 0
+                        }
+                    output[year][date_key]["stocks"][stock]["Quantity_in_crores"] += Quantity_in_crores
+                    output[year][date_key]["stocks"][stock]["Amount_in_crores"] += Amount_in_crores
 
-      summaryBox.innerHTML = `
-        <h2>${stock}</h2>
-        <p><strong>Summary:</strong> ${data.summary}</p>
-        <p><strong>Column C (Crores):</strong> ₹${data.total_c.toFixed(2)} Cr</p>
-        <p><strong>Column D (Crores):</strong> ₹${data.total_d.toFixed(2)} Cr</p>
-      `;
-    }
-  </script>
-</body>
+# Save the final JSON
+os.makedirs("docs", exist_ok=True)
+with open("docs/mtf_data.json", "w", encoding="utf-8") as f:
+    json.dump(output, f, indent=2)
+
 </html>
