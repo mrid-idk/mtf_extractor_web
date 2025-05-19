@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MTF Stock Summary</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    select, input { padding: 8px; margin: 10px 0; width: 100%; max-width: 400px; }
+    .summary { margin-top: 20px; }
+    ul.suggestions { list-style: none; padding: 0; border: 1px solid #ccc; max-height: 150px; overflow-y: auto; }
+    ul.suggestions li { padding: 5px; cursor: pointer; }
+    ul.suggestions li:hover { background-color: #f0f0f0; }
+  </style>
+</head>
+<body>
+  <h1>MTF Stock Summary Viewer</h1>
+
+  <label for="yearSelect">Select Year:</label>
+  <select id="yearSelect"></select>
+
+  <label for="stockSearch">Search Stock:</label>
+  <input type="text" id="stockSearch" placeholder="Enter stock name..." autocomplete="off"/>
+  <ul id="suggestions" class="suggestions"></ul>
+
+  <div class="summary" id="summaryBox"></div>
+
+  <script>
+    let mtfData = {};
+    let currentYear = "";
+    const yearSelect = document.getElementById("yearSelect");
+    const stockSearch = document.getElementById("stockSearch");
+    const suggestionsBox = document.getElementById("suggestions");
+    const summaryBox = document.getElementById("summaryBox");
+
+    fetch("mtf_data.json")
+      .then(response => response.json())
+      .then(data => {
+        mtfData = data;
+        const years = Object.keys(mtfData).sort().reverse();
+        years.forEach(year => {
+          const option = document.createElement("option");
+          option.value = year;
+          option.textContent = year;
+          yearSelect.appendChild(option);
+        });
+        currentYear = years[0];
+        yearSelect.value = currentYear;
+      });
+
+    yearSelect.addEventListener("change", () => {
+      currentYear = yearSelect.value;
+      stockSearch.value = "";
+      summaryBox.innerHTML = "";
+      suggestionsBox.innerHTML = "";
+    });
+
+    stockSearch.addEventListener("input", () => {
+      const input = stockSearch.value.toUpperCase();
+      suggestionsBox.innerHTML = "";
+      if (!input || !mtfData[currentYear]) return;
+
+      const matches = Object.keys(mtfData[currentYear]).filter(stock =>
+        stock.includes(input)
+      ).slice(0, 10);
+
+      matches.forEach(stock => {
+        const li = document.createElement("li");
+        li.textContent = stock;
+        li.addEventListener("click", () => {
+          stockSearch.value = stock;
+          suggestionsBox.innerHTML = "";
+          showSummary(stock);
+        });
+        suggestionsBox.appendChild(li);
+      });
+    });
+
+    function showSummary(stock) {
+      const data = mtfData[currentYear][stock];
+      if (!data) {
+        summaryBox.innerHTML = `<p>No data found for <strong>${stock}</strong></p>`;
+        return;
+      }
+
+      summaryBox.innerHTML = `
+        <h2>${stock}</h2>
+        <p><strong>Summary:</strong> ${data.summary}</p>
+        <p><strong>Column C (Crores):</strong> ₹${data.total_c.toFixed(2)} Cr</p>
+        <p><strong>Column D (Crores):</strong> ₹${data.total_d.toFixed(2)} Cr</p>
+      `;
+    }
+  </script>
+</body>
+</html>
