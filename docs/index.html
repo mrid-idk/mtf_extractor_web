@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MTF Data Dashboard</title>
   <style>
     body {
@@ -36,7 +36,7 @@
   <br/>
 
   <label for="stockInput">Search Stock:</label>
-  <input list="stockList" id="stockInput" placeholder="Enter stock name"/>
+  <input list="stockList" id="stockInput" placeholder="Enter stock name" />
   <datalist id="stockList"></datalist>
 
   <div class="summary" id="summaryBox">
@@ -53,109 +53,159 @@
   </div>
 
   <script>
-    let mtfData = {};
+    let indexData = {}; // folder structure index
+    let currentData = null; // JSON data for selected date
 
-    async function loadData() {
-      const res = await fetch('mtf_data.json');
-      mtfData = await res.json();
-      populateYearDropdown();
+    async function loadIndex() {
+      try {
+        const res = await fetch('output_data/index.json');
+        if (!res.ok) throw new Error('Failed to load index.json');
+        indexData = await res.json();
+        populateYearDropdown();
+      } catch (e) {
+        alert('Error loading index.json: ' + e.message);
+      }
     }
 
     function populateYearDropdown() {
       const yearSelect = document.getElementById('yearSelect');
       yearSelect.innerHTML = `<option value="">--Select Year--</option>`;
-      for (let year of Object.keys(mtfData).sort()) {
+      for (let year of Object.keys(indexData).sort()) {
         yearSelect.innerHTML += `<option value="${year}">${year}</option>`;
       }
+      resetDropdown('monthSelect');
+      resetDropdown('dateSelect');
+      resetStockInput();
+      clearSummary();
+      clearStockDetails();
     }
 
-    function populateMonthAndDateDropdowns(year) {
+    function resetDropdown(id) {
+      document.getElementById(id).innerHTML = `<option value="">--Select--</option>`;
+    }
+
+    function resetStockInput() {
+      document.getElementById('stockInput').value = '';
+      document.getElementById('stockList').innerHTML = '';
+    }
+
+    function clearSummary() {
+      document.getElementById('summaryList').innerHTML = '';
+    }
+
+    function clearStockDetails() {
+      document.getElementById('stockName').textContent = '';
+      document.getElementById('stockSummary').textContent = '';
+      document.getElementById('stockC').textContent = '';
+      document.getElementById('stockD').textContent = '';
+    }
+
+    function populateMonthDropdown(year) {
       const monthSelect = document.getElementById('monthSelect');
-      const dateSelect = document.getElementById('dateSelect');
       monthSelect.innerHTML = `<option value="">--Select Month--</option>`;
-      dateSelect.innerHTML = `<option value="">--Select Date--</option>`;
-
-      const monthMap = {};
-      const dates = Object.keys(mtfData[year]);
-
-      for (let d of dates) {
-        const parts = d.split("-");
-        const month = parts[1].toUpperCase();
-        if (!monthMap[month]) monthMap[month] = [];
-        monthMap[month].push(d);
-      }
-
-      for (let month of Object.keys(monthMap).sort()) {
+      if (!indexData[year]) return;
+      for (let month of Object.keys(indexData[year]).sort()) {
         monthSelect.innerHTML += `<option value="${month}">${month}</option>`;
       }
-
-      monthSelect.onchange = () => {
-        const selectedMonth = monthSelect.value;
-        dateSelect.innerHTML = `<option value="">--Select Date--</option>`;
-        if (selectedMonth) {
-          for (let d of monthMap[selectedMonth]) {
-            dateSelect.innerHTML += `<option value="${d}">${d}</option>`;
-          }
-        }
-      };
+      resetDropdown('dateSelect');
+      resetStockInput();
+      clearSummary();
+      clearStockDetails();
     }
 
-    function populateStockList(year, date) {
+    function populateDateDropdown(year, month) {
+      const dateSelect = document.getElementById('dateSelect');
+      dateSelect.innerHTML = `<option value="">--Select Date--</option>`;
+      if (!indexData[year] || !indexData[year][month]) return;
+      for (let fileName of indexData[year][month].sort()) {
+        // Show date without ".json"
+        const dateStr = fileName.replace('.json', '');
+        dateSelect.innerHTML += `<option value="${fileName}">${dateStr}</option>`;
+      }
+      resetStockInput();
+      clearSummary();
+      clearStockDetails();
+    }
+
+    async function loadDateData(year, month, fileName) {
+      if (!year || !month || !fileName) return;
+      try {
+        const url = `output_data/${year}/${month}/${fileName}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to load ' + fileName);
+        currentData = await res.json();
+
+        showSummary(currentData.summary);
+        populateStockList(Object.keys(currentData.stocks || {}));
+        clearStockDetails();
+      } catch (e) {
+        alert('Error loading data file: ' + e.message);
+      }
+    }
+
+    function showSummary(summaryData) {
+      const summaryBox = document.getElementById('summaryList');
+      summaryBox.innerHTML = '';
+      if (!summaryData) return;
+      for (let row of summaryData) {
+        summaryBox.innerHTML += `<li>${row.particular}: ₹${row.amount_crores} Cr</li>`;
+      }
+    }
+
+    function populateStockList(stockArray) {
       const stockList = document.getElementById('stockList');
-      const stocks = Object.keys(mtfData[year][date].stocks || {});
       stockList.innerHTML = '';
-      for (let stock of stocks) {
+      for (let stock of stockArray) {
         const option = document.createElement('option');
         option.value = stock;
         stockList.appendChild(option);
       }
     }
 
-    function showSummary(year, date) {
-      const summaryBox = document.getElementById('summaryList');
-      const summaryData = mtfData[year][date].summary || [];
-      summaryBox.innerHTML = '';
-      for (let row of summaryData) {
-        summaryBox.innerHTML += `<li>${row.particular}: ₹${row.amount_crores} Cr</li>`;
+    function showStockDetails(stockName) {
+      if (!currentData || !currentData.stocks) {
+        clearStockDetails();
+        return;
       }
-    }
-
-    function showStockDetails(year, date, stockName) {
-      const stock = mtfData[year][date].stocks[stockName];
-      if (!stock) return;
-
+      const stock = currentData.stocks[stockName];
+      if (!stock) {
+        clearStockDetails();
+        return;
+      }
       document.getElementById('stockName').textContent = stockName;
-      document.getElementById('stockSummary').textContent = stock.summary;
-      document.getElementById('stockC').textContent = stock.total_c.toFixed(2);
-      document.getElementById('stockD').textContent = stock.total_d.toFixed(2);
+      document.getElementById('stockSummary').textContent = stock.summary || '-';
+      document.getElementById('stockC').textContent = stock.total_c?.toFixed(2) || '-';
+      document.getElementById('stockD').textContent = stock.total_d?.toFixed(2) || '-';
     }
 
+    // Event Listeners
     document.getElementById('yearSelect').addEventListener('change', function () {
       const year = this.value;
-      if (year) {
-        populateMonthAndDateDropdowns(year);
-      }
+      populateMonthDropdown(year);
+    });
+
+    document.getElementById('monthSelect').addEventListener('change', function () {
+      const year = document.getElementById('yearSelect').value;
+      const month = this.value;
+      populateDateDropdown(year, month);
     });
 
     document.getElementById('dateSelect').addEventListener('change', function () {
       const year = document.getElementById('yearSelect').value;
-      const date = this.value;
-      if (year && date) {
-        populateStockList(year, date);
-        showSummary(year, date);
-      }
+      const month = document.getElementById('monthSelect').value;
+      const fileName = this.value;
+      loadDateData(year, month, fileName);
+      document.getElementById('stockInput').value = '';
+      clearStockDetails();
     });
 
     document.getElementById('stockInput').addEventListener('input', function () {
       const stockName = this.value;
-      const year = document.getElementById('yearSelect').value;
-      const date = document.getElementById('dateSelect').value;
-      if (year && date && stockName) {
-        showStockDetails(year, date, stockName);
-      }
+      showStockDetails(stockName);
     });
 
-    loadData();
+    // Load index on page load
+    loadIndex();
   </script>
 </body>
 </html>
