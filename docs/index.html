@@ -358,9 +358,9 @@
       document.getElementById('stockName').textContent = stockName;
       document.getElementById('stockSummary').textContent = stock.summary || '-';
       document.getElementById('stockC').textContent = 
-        stock.total_c !== undefined ? stock.total_c.toFixed(2) : '-';
+      stock.Quantity_in_crores !== undefined ? stock.Quantity_in_crores.toFixed(2) : '-';
       document.getElementById('stockD').textContent = 
-        stock.total_d !== undefined ? stock.total_d.toFixed(2) : '-';
+      stock.Amount_in_crores !== undefined ?  stock.Amount_in_crores.toFixed(2) : '-';
     }
 
     /**
