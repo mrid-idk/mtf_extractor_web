@@ -6,39 +6,134 @@
   <title>MTF Data Dashboard</title>
   <style>
     body {
-      font-family: sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
       padding: 2rem;
+      max-width: 1200px;
+      margin: 0 auto;
+      color: #333;
+      line-height: 1.5;
     }
+    
+    h1 {
+      color: #2c3e50;
+      margin-bottom: 1.5rem;
+      border-bottom: 2px solid #eee;
+      padding-bottom: 0.5rem;
+    }
+    
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    
+    .control-group {
+      display: flex;
+      flex-direction: column;
+    }
+    
     select, input {
-      margin: 0.5rem;
+      margin: 0.25rem 0;
       padding: 0.5rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      min-width: 150px;
     }
+    
+    select:focus, input:focus {
+      outline: none;
+      border-color: #3498db;
+      box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+    }
+    
     .summary, .stock-result {
       margin-top: 2rem;
-      padding: 1rem;
-      border: 1px solid #ccc;
+      padding: 1.5rem;
+      border: 1px solid #ddd;
       border-radius: 8px;
+      background-color: #f9f9f9;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    .summary h3, .stock-result h3 {
+      margin-top: 0;
+      color: #2c3e50;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 0.5rem;
+    }
+    
+    #summaryList {
+      list-style-type: none;
+      padding-left: 0;
+    }
+    
+    #summaryList li {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #eee;
+    }
+    
+    #summaryList li:last-child {
+      border-bottom: none;
+    }
+    
+    .loading {
+      display: none;
+      margin: 1rem 0;
+      font-style: italic;
+      color: #666;
+    }
+    
+    .error {
+      color: #e74c3c;
+      font-weight: bold;
+    }
+    
+    @media (max-width: 768px) {
+      body {
+        padding: 1rem;
+      }
+      
+      .controls {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      
+      select, input {
+        width: 100%;
+      }
     }
   </style>
 </head>
 <body>
   <h1>MTF Data Search</h1>
 
-  <label for="yearSelect">Year:</label>
-  <select id="yearSelect"></select>
+  <div class="controls">
+    <div class="control-group">
+      <label for="yearSelect">Year:</label>
+      <select id="yearSelect"></select>
+    </div>
 
-  <label for="monthSelect">Month:</label>
-  <select id="monthSelect"></select>
+    <div class="control-group">
+      <label for="monthSelect">Month:</label>
+      <select id="monthSelect"></select>
+    </div>
 
-  <label for="dateSelect">Date:</label>
-  <select id="dateSelect"></select>
+    <div class="control-group">
+      <label for="dateSelect">Date:</label>
+      <select id="dateSelect"></select>
+    </div>
 
-  <br/>
+    <div class="control-group">
+      <label for="stockInput">Search Stock:</label>
+      <input list="stockList" id="stockInput" placeholder="Enter stock name" />
+      <datalist id="stockList"></datalist>
+    </div>
+  </div>
 
-  <label for="stockInput">Search Stock:</label>
-  <input list="stockList" id="stockInput" placeholder="Enter stock name" />
-  <datalist id="stockList"></datalist>
-
+  <div class="loading" id="loadingIndicator">Loading data...</div>
+  
   <div class="summary" id="summaryBox">
     <h3>Summary</h3>
     <ul id="summaryList"></ul>
@@ -53,8 +148,28 @@
   </div>
 
   <script>
-    const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+    // Configuration - Set this to your GitHub repository path
+    const BASE_URL = ''; // Will be populated in initialization
+    const FOLDER_PATH = 'output_data';
+    let currentData = null;
+    
+    /**
+     * Helper function to show loading indicator
+     */
+    function showLoading() {
+      document.getElementById('loadingIndicator').style.display = 'block';
+    }
+    
+    /**
+     * Helper function to hide loading indicator
+     */
+    function hideLoading() {
+      document.getElementById('loadingIndicator').style.display = 'none';
+    }
 
+    /**
+     * Populate a dropdown with provided items
+     */
     function populateDropdown(id, items) {
       const dropdown = document.getElementById(id);
       dropdown.innerHTML = `<option value="">--Select--</option>`;
@@ -63,133 +178,209 @@
       });
     }
 
-    async function fetchJsonList(path) {
+    /**
+     * Fetch JSON list of files from GitHub
+     */
+    async function listGitHubContents(path) {
+      showLoading();
       try {
-        const res = await fetch(path);
-        if (!res.ok) return [];
-        const text = await res.text();
-        const parser = new DOMParser();
-        const html = parser.parseFromString(text, 'text/html');
-        return Array.from(html.querySelectorAll('a'))
-          .map(a => a.getAttribute('href'))
-          .filter(name => name.endsWith('.json'));
+        // For GitHub Pages hosting, we need a different approach to list directory contents
+        // since direct directory listing is not available.
+        // We'll use a pre-generated index.json file in each directory
+        
+        const url = `${BASE_URL}/${path}/index.json`;
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch index from ${url}: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        return data.items || [];
       } catch (err) {
-        console.error(err);
+        console.error(`Error fetching contents for ${path}:`, err);
         return [];
+      } finally {
+        hideLoading();
       }
     }
 
-  async function listFolder(path) {
-  try {
-    const res = await fetch(path);
-    const text = await res.text();
-    const parser = new DOMParser();
-    const html = parser.parseFromString(text, 'text/html');
-    return Array.from(html.querySelectorAll('a'))
-      .map(a => a.getAttribute('href'))
-      .filter(name => name && !name.startsWith('http')) // filter out external URLs
-      .map(name => name.replace(/\/$/, '')) // remove trailing slash
-      .filter(name => name !== '..' && name !== '../'); // filter parent links
-  } catch (err) {
-    console.error(err);
-    return [];
-  }
-}
-
+    /**
+     * Update years dropdown
+     */
     async function updateYears() {
-      const years = await listFolder('output_data/');
-      populateDropdown('yearSelect', years);
+      try {
+        const years = await listGitHubContents(FOLDER_PATH);
+        populateDropdown('yearSelect', years);
+      } catch (err) {
+        console.error("Error updating years:", err);
+      }
     }
 
+    /**
+     * Update months dropdown based on selected year
+     */
     async function updateMonths(year) {
       if (!year) return;
-      const months = await listFolder(`output_data/${year}/`);
-      populateDropdown('monthSelect', months);
+      try {
+        const months = await listGitHubContents(`${FOLDER_PATH}/${year}`);
+        populateDropdown('monthSelect', months);
+      } catch (err) {
+        console.error("Error updating months:", err);
+      }
     }
 
+    /**
+     * Update dates dropdown based on selected year and month
+     */
     async function updateDates(year, month) {
       if (!year || !month) return;
-      const files = await listFolder(`output_data/${year}/${month}/`);
-      const jsonFiles = files.filter(name => name.endsWith('.json'));
-      populateDropdown('dateSelect', jsonFiles);
+      try {
+        const files = await listGitHubContents(`${FOLDER_PATH}/${year}/${month}`);
+        const jsonFiles = files.filter(name => name.endsWith('.json') && name !== 'index.json');
+        populateDropdown('dateSelect', jsonFiles);
+      } catch (err) {
+        console.error("Error updating dates:", err);
+      }
     }
 
+    /**
+     * Load data for a specific date
+     */
     async function loadDateData(year, month, file) {
+      if (!year || !month || !file || file === 'index.json') return;
+      
+      showLoading();
       try {
-        const res = await fetch(`output_data/${year}/${month}/${file}`);
-        if (!res.ok) throw new Error('Failed to fetch data file');
+        const url = `${BASE_URL}/${FOLDER_PATH}/${year}/${month}/${file}`;
+        const res = await fetch(url);
+        
+        if (!res.ok) {
+          throw new Error(`Failed to fetch data from ${url}: ${res.status}`);
+        }
+        
         const data = await res.json();
-
         currentData = data;
+        
         showSummary(data.summary);
         populateStockList(Object.keys(data.stocks || {}));
         clearStockDetails();
       } catch (err) {
-        alert('Error loading data: ' + err.message);
+        console.error("Error loading date data:", err);
+        document.getElementById('summaryList').innerHTML = 
+          `<li class="error">Error loading data: ${err.message}</li>`;
+      } finally {
+        hideLoading();
       }
     }
 
+    /**
+     * Display summary data
+     */
     function showSummary(summaryData) {
       const list = document.getElementById('summaryList');
       list.innerHTML = '';
-      if (!summaryData) return;
+      
+      if (!summaryData || summaryData.length === 0) {
+        list.innerHTML = '<li>No summary data available</li>';
+        return;
+      }
+      
       for (let item of summaryData) {
-        list.innerHTML += `<li>${item.particular}: ₹${item.amount_crores} Cr</li>`;
+        list.innerHTML += `<li><strong>${item.particular}:</strong> ₹${item.amount_crores.toLocaleString()} Cr</li>`;
       }
     }
 
+    /**
+     * Populate stock list datalist
+     */
     function populateStockList(stocks) {
       const list = document.getElementById('stockList');
       list.innerHTML = '';
-      stocks.forEach(stock => {
+      
+      if (!stocks || stocks.length === 0) return;
+      
+      stocks.sort().forEach(stock => {
         const opt = document.createElement('option');
         opt.value = stock;
         list.appendChild(opt);
       });
     }
 
+    /**
+     * Display details for selected stock
+     */
     function showStockDetails(name) {
+      if (!name) {
+        clearStockDetails();
+        return;
+      }
+      
       const stock = currentData?.stocks?.[name];
-      if (!stock) return clearStockDetails();
+      if (!stock) {
+        clearStockDetails();
+        document.getElementById('stockName').textContent = name;
+        document.getElementById('stockSummary').textContent = 'No data found';
+        return;
+      }
 
       document.getElementById('stockName').textContent = name;
       document.getElementById('stockSummary').textContent = stock.summary || '-';
-      document.getElementById('stockC').textContent = stock.total_c?.toFixed(2) || '-';
-      document.getElementById('stockD').textContent = stock.total_d?.toFixed(2) || '-';
+      document.getElementById('stockC').textContent = 
+        stock.total_c !== undefined ? stock.total_c.toFixed(2) : '-';
+      document.getElementById('stockD').textContent = 
+        stock.total_d !== undefined ? stock.total_d.toFixed(2) : '-';
     }
 
+    /**
+     * Clear stock details display
+     */
     function clearStockDetails() {
-      document.getElementById('stockName').textContent = '';
-      document.getElementById('stockSummary').textContent = '';
-      document.getElementById('stockC').textContent = '';
-      document.getElementById('stockD').textContent = '';
+      document.getElementById('stockName').textContent = '-';
+      document.getElementById('stockSummary').textContent = '-';
+      document.getElementById('stockC').textContent = '-';
+      document.getElementById('stockD').textContent = '-';
     }
 
-    document.getElementById('yearSelect').addEventListener('change', async function () {
-      await updateMonths(this.value);
-      populateDropdown('dateSelect', []);
-      clearStockDetails();
-    });
+    /**
+     * Initialize the dashboard
+     */
+    function init() {
+      // Set the base URL to the GitHub Pages URL or to empty if it's the same domain
+      BASE_URL = window.location.hostname.includes('github.io') ? 
+        `/${window.location.pathname.split('/')[1]}` : '';
+      
+      // Set up event listeners
+      document.getElementById('yearSelect').addEventListener('change', async function () {
+        document.getElementById('monthSelect').value = '';
+        document.getElementById('dateSelect').value = '';
+        clearStockDetails();
+        await updateMonths(this.value);
+      });
 
-    document.getElementById('monthSelect').addEventListener('change', async function () {
-      const year = document.getElementById('yearSelect').value;
-      await updateDates(year, this.value);
-      clearStockDetails();
-    });
+      document.getElementById('monthSelect').addEventListener('change', async function () {
+        document.getElementById('dateSelect').value = '';
+        clearStockDetails();
+        const year = document.getElementById('yearSelect').value;
+        await updateDates(year, this.value);
+      });
 
-    document.getElementById('dateSelect').addEventListener('change', async function () {
-      const year = document.getElementById('yearSelect').value;
-      const month = document.getElementById('monthSelect').value;
-      await loadDateData(year, month, this.value);
-    });
+      document.getElementById('dateSelect').addEventListener('change', async function () {
+        const year = document.getElementById('yearSelect').value;
+        const month = document.getElementById('monthSelect').value;
+        await loadDateData(year, month, this.value);
+      });
 
-    document.getElementById('stockInput').addEventListener('input', function () {
-      showStockDetails(this.value);
-    });
+      document.getElementById('stockInput').addEventListener('input', function () {
+        showStockDetails(this.value);
+      });
 
-    // Initialize
-    let currentData = null;
-    updateYears();
+      // Load initial data
+      updateYears();
+    }
+
+    // Initialize the application when the page loads
+    window.addEventListener('DOMContentLoaded', init);
   </script>
 </body>
 </html>
