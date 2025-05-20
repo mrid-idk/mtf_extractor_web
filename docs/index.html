@@ -117,6 +117,11 @@ canvas {
         flex-direction: column;
         align-items: stretch;
       }
+      .stock-chart-container {
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px solid #eee;
+      }
       
       select, input {
         width: 100%;
@@ -164,6 +169,10 @@ canvas {
     <p><strong>Summary:</strong> <span id="stockSummary"></span></p>
     <p><strong>Qty Fin (Cr):</strong> <span id="stockC"></span></p>
     <p><strong>Amt Fin (Cr):</strong> <span id="stockD"></span></p>
+    <!-- Add this inside the stock-result div with id="stockBox" -->
+    <div class="stock-chart-container">
+      <canvas id="individualStockChart"></canvas>
+    </div>
   </div>
   <div class="charts-section">
   <h2>Data Visualization</h2>
@@ -379,39 +388,59 @@ async function loadStockData(year, month, dateFile) {
     /**
      * Displays details for the selected stock
      */
-    function displayStockDetails(stockName) {
-      if (!stockName || !currentData || !currentData.stocks) {
-        clearStockDetails();
-        return;
-      }
-      
-      const stock = currentData.stocks[stockName];
-      
-      if (!stock) {
-        document.getElementById('stockName').textContent = stockName;
-        document.getElementById('stockSummary').textContent = 'No data found';
-        document.getElementById('stockC').textContent = '-';
-        document.getElementById('stockD').textContent = '-';
-        return;
-      }
-      
-      document.getElementById('stockName').textContent = stockName;
-      document.getElementById('stockSummary').textContent = stock.summary || '-';
-      document.getElementById('stockC').textContent = 
-      stock.Quantity_in_crores !== undefined ? stock.Quantity_in_crores.toFixed(2) : '-';
-      document.getElementById('stockD').textContent = 
-      stock.Amount_in_crores !== undefined ?  stock.Amount_in_crores.toFixed(2) : '-';
+    /**
+ * Displays details for the selected stock
+ */
+function displayStockDetails(stockName) {
+  if (!stockName || !currentData || !currentData.stocks) {
+    clearStockDetails();
+    return;
+  }
+  
+  const stock = currentData.stocks[stockName];
+  
+  if (!stock) {
+    document.getElementById('stockName').textContent = stockName;
+    document.getElementById('stockSummary').textContent = 'No data found';
+    document.getElementById('stockC').textContent = '-';
+    document.getElementById('stockD').textContent = '-';
+    // Clear any existing chart
+    if (window.individualStockChartInstance) {
+      window.individualStockChartInstance.destroy();
     }
+    return;
+  }
+  
+  document.getElementById('stockName').textContent = stockName;
+  document.getElementById('stockSummary').textContent = stock.summary || '-';
+  
+  // Use the correct property names for quantity and amount based on the actual data structure
+  document.getElementById('stockC').textContent = 
+    stock.Quantity_in_crores !== undefined ? stock.Quantity_in_crores.toFixed(2) : '-';
+  document.getElementById('stockD').textContent = 
+    stock.Amount_in_crores !== undefined ? stock.Amount_in_crores.toFixed(2) : '-';
+  
+  // Create chart for the individual stock
+  createIndividualStockChart(stockName, stock);
+}
 
     /**
      * Clears the stock details display
      */
-    function clearStockDetails() {
-      document.getElementById('stockName').textContent = '-';
-      document.getElementById('stockSummary').textContent = '-';
-      document.getElementById('stockC').textContent = '-';
-      document.getElementById('stockD').textContent = '-';
-    }
+   /**
+ * Clears the stock details display
+ */
+function clearStockDetails() {
+  document.getElementById('stockName').textContent = '-';
+  document.getElementById('stockSummary').textContent = '-';
+  document.getElementById('stockC').textContent = '-';
+  document.getElementById('stockD').textContent = '-';
+  
+  // Clear any existing chart
+  if (window.individualStockChartInstance) {
+    window.individualStockChartInstance.destroy();
+  }
+}
     /**
  * Creates a summary chart based on the provided summary data
  */
@@ -576,6 +605,76 @@ function createStockChart(stocksData) {
             label: function(context) {
               const label = context.dataset.label || '';
               const value = context.parsed.y.toFixed(2);
+              return `${label}: ${value} Cr`;
+            }
+          }
+        }
+      }
+    }
+  });
+}      
+
+    /**
+ * Creates a chart for the individual stock details
+ */
+function createIndividualStockChart(stockName, stockData) {
+  const ctx = document.getElementById('individualStockChart');
+  
+  // Check if a chart instance already exists and destroy it
+  if (window.individualStockChartInstance) {
+    window.individualStockChartInstance.destroy();
+  }
+  
+  if (!stockData) {
+    console.log('No data available for individual stock chart');
+    return;
+  }
+  
+  // Create data for the chart - we'll use a simple comparison chart
+  // showing quantity vs amount for this specific stock
+  window.individualStockChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['Selected Stock: ' + stockName],
+      datasets: [
+        {
+          label: 'Quantity (Cr)',
+          data: [stockData.Quantity_in_crores || 0],
+          backgroundColor: 'rgba(54, 162, 235, 0.7)',
+          borderColor: 'rgba(54, 162, 235, 1)',
+          borderWidth: 1
+        },
+        {
+          label: 'Amount (Cr)',
+          data: [stockData.Amount_in_crores || 0],
+          backgroundColor: 'rgba(255, 99, 132, 0.7)',
+          borderColor: 'rgba(255, 99, 132, 1)',
+          borderWidth: 1
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      indexAxis: 'y',  // Horizontal bar chart
+      scales: {
+        x: {
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: 'Value (in Crores)'
+          }
+        }
+      },
+      plugins: {
+        title: {
+          display: true,
+          text: 'Stock Metrics'
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const label = context.dataset.label || '';
+              const value = context.parsed.x.toFixed(2);
               return `${label}: ${value} Cr`;
             }
           }
