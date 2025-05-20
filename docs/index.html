@@ -149,58 +149,71 @@
 
   <script>
     // Configuration
-    let BASE_URL = ''; // Will be set in initialization
     const FOLDER_PATH = 'output_data1';
     let currentData = null;
     
     /**
-     * Helper function to show loading indicator
+     * Shows the loading indicator
      */
     function showLoading() {
       document.getElementById('loadingIndicator').style.display = 'block';
     }
     
     /**
-     * Helper function to hide loading indicator
+     * Hides the loading indicator
      */
     function hideLoading() {
       document.getElementById('loadingIndicator').style.display = 'none';
     }
 
     /**
-     * Populate a dropdown with provided items
+     * Displays an error message in the summary box
+     */
+    function showError(message) {
+      document.getElementById('summaryList').innerHTML = 
+        `<li class="error">${message}</li>`;
+    }
+    
+    /**
+     * Populates a dropdown with the provided items
      */
     function populateDropdown(id, items) {
       const dropdown = document.getElementById(id);
-      dropdown.innerHTML = `<option value="">--Select--</option>`;
-      items.forEach(item => {
-        dropdown.innerHTML += `<option value="${item}">${item}</option>`;
-      });
+      dropdown.innerHTML = '<option value="">--Select--</option>';
+      
+      if (items && items.length > 0) {
+        items.forEach(item => {
+          dropdown.innerHTML += `<option value="${item}">${item}</option>`;
+        });
+        console.log(`Populated ${id} with ${items.length} items`);
+      } else {
+        console.log(`No items to populate ${id}`);
+      }
     }
 
     /**
-     * Fetch JSON list of files from GitHub
+     * Fetches and parses an index.json file
      */
-    async function listGitHubContents(path) {
+    async function fetchIndexJson(path) {
       showLoading();
       try {
-        // For GitHub Pages hosting, we'll use index.json files
-        const url = `${path}/index.json`;
-        console.log(`Fetching from: ${url}`);
-        
-        const response = await fetch(url);
+        const response = await fetch(`${path}/index.json`);
         
         if (!response.ok) {
-          throw new Error(`Failed to fetch index from ${url}: ${response.status}`);
+          throw new Error(`HTTP error! Status: ${response.status}`);
         }
         
         const data = await response.json();
-        console.log(`Data received:`, data);
-        return data.items || [];
-      } catch (err) {
-        console.error(`Error fetching contents for ${path}:`, err);
-        document.getElementById('summaryList').innerHTML = 
-          `<li class="error">Error loading directory listing: ${err.message}</li>`;
+        console.log(`Index data for ${path}:`, data);
+        
+        if (!data.items || !Array.isArray(data.items)) {
+          throw new Error('Invalid index.json format - missing items array');
+        }
+        
+        return data.items;
+      } catch (error) {
+        console.error(`Failed to fetch index.json from ${path}:`, error);
+        showError(`Could not load directory listing: ${error.message}`);
         return [];
       } finally {
         hideLoading();
@@ -208,81 +221,75 @@
     }
 
     /**
-     * Update years dropdown
+     * Updates the years dropdown with available years
      */
-    async function updateYears() {
-      try {
-        console.log(`Updating years from ${FOLDER_PATH}`);
-        const years = await listGitHubContents(FOLDER_PATH);
-        populateDropdown('yearSelect', years);
-      } catch (err) {
-        console.error("Error updating years:", err);
-      }
+    async function loadYears() {
+      console.log('Loading years...');
+      const years = await fetchIndexJson(FOLDER_PATH);
+      populateDropdown('yearSelect', years);
     }
 
     /**
-     * Update months dropdown based on selected year
+     * Updates the months dropdown based on selected year
      */
-    async function updateMonths(year) {
+    async function loadMonths(year) {
+      console.log(`Loading months for year ${year}...`);
       if (!year) return;
-      try {
-        const months = await listGitHubContents(`${FOLDER_PATH}/${year}`);
-        populateDropdown('monthSelect', months);
-      } catch (err) {
-        console.error("Error updating months:", err);
-      }
+      
+      const months = await fetchIndexJson(`${FOLDER_PATH}/${year}`);
+      populateDropdown('monthSelect', months);
     }
 
     /**
-     * Update dates dropdown based on selected year and month
+     * Updates the dates dropdown based on selected year and month
      */
-    async function updateDates(year, month) {
+    async function loadDates(year, month) {
+      console.log(`Loading dates for ${year}/${month}...`);
       if (!year || !month) return;
-      try {
-        const files = await listGitHubContents(`${FOLDER_PATH}/${year}/${month}`);
-        const jsonFiles = files.filter(name => name.endsWith('.json') && name !== 'index.json');
-        populateDropdown('dateSelect', jsonFiles);
-      } catch (err) {
-        console.error("Error updating dates:", err);
-      }
+      
+      const files = await fetchIndexJson(`${FOLDER_PATH}/${year}/${month}`);
+      const dateFiles = files.filter(file => file.endsWith('.json') && file !== 'index.json');
+      populateDropdown('dateSelect', dateFiles);
     }
 
     /**
-     * Load data for a specific date
+     * Loads JSON data for the selected date
      */
-    async function loadDateData(year, month, file) {
-      if (!year || !month || !file || file === 'index.json') return;
+    async function loadStockData(year, month, dateFile) {
+      console.log(`Loading stock data for ${year}/${month}/${dateFile}...`);
+      if (!year || !month || !dateFile) return;
       
       showLoading();
       try {
-        const url = `${FOLDER_PATH}/${year}/${month}/${file}`;
-        console.log(`Loading data from: ${url}`);
+        const filePath = `${FOLDER_PATH}/${year}/${month}/${dateFile}`;
+        const response = await fetch(filePath);
         
-        const res = await fetch(url);
-        
-        if (!res.ok) {
-          throw new Error(`Failed to fetch data from ${url}: ${res.status}`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
         }
         
-        const data = await res.json();
+        const data = await response.json();
+        console.log('Stock data loaded:', data);
+        
+        // Store the loaded data
         currentData = data;
         
-        showSummary(data.summary);
-        populateStockList(Object.keys(data.stocks || {}));
+        // Update the UI with the loaded data
+        displaySummary(data.summary || []);
+        populateStockSearch(Object.keys(data.stocks || {}));
         clearStockDetails();
-      } catch (err) {
-        console.error("Error loading date data:", err);
-        document.getElementById('summaryList').innerHTML = 
-          `<li class="error">Error loading data: ${err.message}</li>`;
+      } catch (error) {
+        console.error('Error loading stock data:', error);
+        showError(`Failed to load data: ${error.message}`);
       } finally {
         hideLoading();
       }
     }
 
     /**
-     * Display summary data
+     * Displays summary information
      */
-    function showSummary(summaryData) {
+    function displaySummary(summaryData) {
       const list = document.getElementById('summaryList');
       list.innerHTML = '';
       
@@ -291,47 +298,64 @@
         return;
       }
       
-      for (let item of summaryData) {
-        const amount = typeof item.amount_crores === 'number' ? 
-          item.amount_crores.toLocaleString() : item.amount_crores;
-        list.innerHTML += `<li><strong>${item.particular}:</strong> ₹${amount} Cr</li>`;
+      for (const item of summaryData) {
+        // Handle various data formats safely
+        const particular = item.particular || 'Unknown';
+        let amount = '-';
+        
+        if (item.amount_crores !== undefined) {
+          if (typeof item.amount_crores === 'number') {
+            amount = item.amount_crores.toLocaleString();
+          } else {
+            amount = item.amount_crores;
+          }
+        }
+        
+        list.innerHTML += `<li><strong>${particular}:</strong> ₹${amount} Cr</li>`;
       }
     }
 
     /**
-     * Populate stock list datalist
+     * Populates the stock search datalist
      */
-    function populateStockList(stocks) {
-      const list = document.getElementById('stockList');
-      list.innerHTML = '';
+    function populateStockSearch(stocks) {
+      const datalist = document.getElementById('stockList');
+      datalist.innerHTML = '';
       
-      if (!stocks || stocks.length === 0) return;
+      if (!stocks || stocks.length === 0) {
+        return;
+      }
       
+      // Sort alphabetically
       stocks.sort().forEach(stock => {
-        const opt = document.createElement('option');
-        opt.value = stock;
-        list.appendChild(opt);
+        const option = document.createElement('option');
+        option.value = stock;
+        datalist.appendChild(option);
       });
+      
+      console.log(`Added ${stocks.length} stocks to search datalist`);
     }
 
     /**
-     * Display details for selected stock
+     * Displays details for the selected stock
      */
-    function showStockDetails(name) {
-      if (!name) {
+    function displayStockDetails(stockName) {
+      if (!stockName || !currentData || !currentData.stocks) {
         clearStockDetails();
         return;
       }
       
-      const stock = currentData?.stocks?.[name];
+      const stock = currentData.stocks[stockName];
+      
       if (!stock) {
-        clearStockDetails();
-        document.getElementById('stockName').textContent = name;
+        document.getElementById('stockName').textContent = stockName;
         document.getElementById('stockSummary').textContent = 'No data found';
+        document.getElementById('stockC').textContent = '-';
+        document.getElementById('stockD').textContent = '-';
         return;
       }
-
-      document.getElementById('stockName').textContent = name;
+      
+      document.getElementById('stockName').textContent = stockName;
       document.getElementById('stockSummary').textContent = stock.summary || '-';
       document.getElementById('stockC').textContent = 
         stock.total_c !== undefined ? stock.total_c.toFixed(2) : '-';
@@ -340,7 +364,7 @@
     }
 
     /**
-     * Clear stock details display
+     * Clears the stock details display
      */
     function clearStockDetails() {
       document.getElementById('stockName').textContent = '-';
@@ -349,37 +373,59 @@
       document.getElementById('stockD').textContent = '-';
     }
 
-    // Set up event listeners and initialize
+    // Initialize when the DOM is fully loaded
     document.addEventListener('DOMContentLoaded', function() {
-      console.log('DOM content loaded, initializing...');
+      console.log('Initializing MTF Data Dashboard...');
       
-      // Set up event listeners
-      document.getElementById('yearSelect').addEventListener('change', async function() {
+      // Set up the Year dropdown change event
+      document.getElementById('yearSelect').addEventListener('change', function() {
+        const selectedYear = this.value;
+        console.log(`Year selection changed to: ${selectedYear}`);
+        
+        // Reset dependent dropdowns
         document.getElementById('monthSelect').innerHTML = '<option value="">--Select--</option>';
         document.getElementById('dateSelect').innerHTML = '<option value="">--Select--</option>';
         clearStockDetails();
-        await updateMonths(this.value);
+        
+        if (selectedYear) {
+          loadMonths(selectedYear);
+        }
       });
-
-      document.getElementById('monthSelect').addEventListener('change', async function() {
+      
+      // Set up the Month dropdown change event
+      document.getElementById('monthSelect').addEventListener('change', function() {
+        const selectedYear = document.getElementById('yearSelect').value;
+        const selectedMonth = this.value;
+        console.log(`Month selection changed to: ${selectedMonth}`);
+        
+        // Reset dependent dropdown
         document.getElementById('dateSelect').innerHTML = '<option value="">--Select--</option>';
         clearStockDetails();
-        const year = document.getElementById('yearSelect').value;
-        await updateDates(year, this.value);
+        
+        if (selectedYear && selectedMonth) {
+          loadDates(selectedYear, selectedMonth);
+        }
       });
-
-      document.getElementById('dateSelect').addEventListener('change', async function() {
-        const year = document.getElementById('yearSelect').value;
-        const month = document.getElementById('monthSelect').value;
-        await loadDateData(year, month, this.value);
+      
+      // Set up the Date dropdown change event
+      document.getElementById('dateSelect').addEventListener('change', function() {
+        const selectedYear = document.getElementById('yearSelect').value;
+        const selectedMonth = document.getElementById('monthSelect').value;
+        const selectedDate = this.value;
+        console.log(`Date selection changed to: ${selectedDate}`);
+        
+        if (selectedYear && selectedMonth && selectedDate) {
+          loadStockData(selectedYear, selectedMonth, selectedDate);
+        }
       });
-
+      
+      // Set up the stock search input event
       document.getElementById('stockInput').addEventListener('input', function() {
-        showStockDetails(this.value);
+        displayStockDetails(this.value);
       });
-
-      // Load initial data
-      updateYears();
+      
+      // Load the initial years data
+      loadYears();
     });
   </script>
 </body>
