@@ -79,19 +79,22 @@
       }
     }
 
-    async function listFolder(path) {
-      try {
-        const res = await fetch(path);
-        const text = await res.text();
-        const parser = new DOMParser();
-        const html = parser.parseFromString(text, 'text/html');
-        return Array.from(html.querySelectorAll('a'))
-          .map(a => a.getAttribute('href').replace(/\/$/, ''))
-          .filter(name => name !== '../');
-      } catch (err) {
-        return [];
-      }
-    }
+  async function listFolder(path) {
+  try {
+    const res = await fetch(path);
+    const text = await res.text();
+    const parser = new DOMParser();
+    const html = parser.parseFromString(text, 'text/html');
+    return Array.from(html.querySelectorAll('a'))
+      .map(a => a.getAttribute('href'))
+      .filter(name => name && !name.startsWith('http')) // filter out external URLs
+      .map(name => name.replace(/\/$/, '')) // remove trailing slash
+      .filter(name => name !== '..' && name !== '../'); // filter parent links
+  } catch (err) {
+    console.error(err);
+    return [];
+  }
+}
 
     async function updateYears() {
       const years = await listFolder('output_data/');
