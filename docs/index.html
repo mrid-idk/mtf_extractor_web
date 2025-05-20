@@ -148,8 +148,8 @@
   </div>
 
   <script>
-    // Configuration - Set this to your GitHub repository path
-    const BASE_URL = ''; // Will be populated in initialization
+    // Configuration
+    let BASE_URL = ''; // Will be set in initialization
     const FOLDER_PATH = 'output_data1';
     let currentData = null;
     
@@ -184,11 +184,10 @@
     async function listGitHubContents(path) {
       showLoading();
       try {
-        // For GitHub Pages hosting, we need a different approach to list directory contents
-        // since direct directory listing is not available.
-        // We'll use a pre-generated index.json file in each directory
+        // For GitHub Pages hosting, we'll use index.json files
+        const url = `${path}/index.json`;
+        console.log(`Fetching from: ${url}`);
         
-        const url = `${BASE_URL}/${path}/index.json`;
         const response = await fetch(url);
         
         if (!response.ok) {
@@ -196,9 +195,12 @@
         }
         
         const data = await response.json();
+        console.log(`Data received:`, data);
         return data.items || [];
       } catch (err) {
         console.error(`Error fetching contents for ${path}:`, err);
+        document.getElementById('summaryList').innerHTML = 
+          `<li class="error">Error loading directory listing: ${err.message}</li>`;
         return [];
       } finally {
         hideLoading();
@@ -210,6 +212,7 @@
      */
     async function updateYears() {
       try {
+        console.log(`Updating years from ${FOLDER_PATH}`);
         const years = await listGitHubContents(FOLDER_PATH);
         populateDropdown('yearSelect', years);
       } catch (err) {
@@ -252,7 +255,9 @@
       
       showLoading();
       try {
-        const url = `${BASE_URL}/${FOLDER_PATH}/${year}/${month}/${file}`;
+        const url = `${FOLDER_PATH}/${year}/${month}/${file}`;
+        console.log(`Loading data from: ${url}`);
+        
         const res = await fetch(url);
         
         if (!res.ok) {
@@ -287,7 +292,9 @@
       }
       
       for (let item of summaryData) {
-        list.innerHTML += `<li><strong>${item.particular}:</strong> ₹${item.amount_crores.toLocaleString()} Cr</li>`;
+        const amount = typeof item.amount_crores === 'number' ? 
+          item.amount_crores.toLocaleString() : item.amount_crores;
+        list.innerHTML += `<li><strong>${item.particular}:</strong> ₹${amount} Cr</li>`;
       }
     }
 
@@ -342,45 +349,38 @@
       document.getElementById('stockD').textContent = '-';
     }
 
-    /**
-     * Initialize the dashboard
-     */
-    function init() {
-      // Set the base URL to the GitHub Pages URL or to empty if it's the same domain
-      BASE_URL = window.location.hostname.includes('github.io') ? 
-        `/${window.location.pathname.split('/')[1]}` : '';
+    // Set up event listeners and initialize
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('DOM content loaded, initializing...');
       
       // Set up event listeners
-      document.getElementById('yearSelect').addEventListener('change', async function () {
-        document.getElementById('monthSelect').value = '';
-        document.getElementById('dateSelect').value = '';
+      document.getElementById('yearSelect').addEventListener('change', async function() {
+        document.getElementById('monthSelect').innerHTML = '<option value="">--Select--</option>';
+        document.getElementById('dateSelect').innerHTML = '<option value="">--Select--</option>';
         clearStockDetails();
         await updateMonths(this.value);
       });
 
-      document.getElementById('monthSelect').addEventListener('change', async function () {
-        document.getElementById('dateSelect').value = '';
+      document.getElementById('monthSelect').addEventListener('change', async function() {
+        document.getElementById('dateSelect').innerHTML = '<option value="">--Select--</option>';
         clearStockDetails();
         const year = document.getElementById('yearSelect').value;
         await updateDates(year, this.value);
       });
 
-      document.getElementById('dateSelect').addEventListener('change', async function () {
+      document.getElementById('dateSelect').addEventListener('change', async function() {
         const year = document.getElementById('yearSelect').value;
         const month = document.getElementById('monthSelect').value;
         await loadDateData(year, month, this.value);
       });
 
-      document.getElementById('stockInput').addEventListener('input', function () {
+      document.getElementById('stockInput').addEventListener('input', function() {
         showStockDetails(this.value);
       });
 
       // Load initial data
       updateYears();
-    }
-
-    // Initialize the application when the page loads
-    window.addEventListener('DOMContentLoaded', init);
+    });
   </script>
 </body>
 </html>
