@@ -288,36 +288,43 @@ canvas {
     /**
      * Loads JSON data for the selected date
      */
-    async function loadStockData(year, month, dateFile) {
-      console.log(`Loading stock data for ${year}/${month}/${dateFile}...`);
-      if (!year || !month || !dateFile) return;
-      
-      showLoading();
-      try {
-        const filePath = `${FOLDER_PATH}/${year}/${month}/${dateFile}`;
-        const response = await fetch(filePath);
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        console.log('Stock data loaded:', data);
-        
-        // Store the loaded data
-        currentData = data;
-        
-        // Update the UI with the loaded data
-        displaySummary(data.summary || []);
-        populateStockSearch(Object.keys(data.stocks || {}));
-        clearStockDetails();
-      } catch (error) {
-        console.error('Error loading stock data:', error);
-        showError(`Failed to load data: ${error.message}`);
-      } finally {
-        hideLoading();
-      }
+   /**
+ * Loads JSON data for the selected date
+ */
+async function loadStockData(year, month, dateFile) {
+  console.log(`Loading stock data for ${year}/${month}/${dateFile}...`);
+  if (!year || !month || !dateFile) return;
+  
+  showLoading();
+  try {
+    const filePath = `${FOLDER_PATH}/${year}/${month}/${dateFile}`;
+    const response = await fetch(filePath);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
     }
+    
+    const data = await response.json();
+    console.log('Stock data loaded:', data);
+    
+    // Store the loaded data
+    currentData = data;
+    
+    // Update the UI with the loaded data
+    displaySummary(data.summary || []);
+    populateStockSearch(Object.keys(data.stocks || {}));
+    clearStockDetails();
+    
+    // Create charts with the loaded data
+    createSummaryChart(data.summary || []);
+    createStockChart(data.stocks || {});
+  } catch (error) {
+    console.error('Error loading stock data:', error);
+    showError(`Failed to load data: ${error.message}`);
+  } finally {
+    hideLoading();
+  }
+}
 
     /**
      * Displays summary information
@@ -405,6 +412,178 @@ canvas {
       document.getElementById('stockC').textContent = '-';
       document.getElementById('stockD').textContent = '-';
     }
+    /**
+ * Creates a summary chart based on the provided summary data
+ */
+function createSummaryChart(summaryData) {
+  const ctx = document.getElementById('summaryChart');
+  
+  // Check if a chart instance already exists and destroy it
+  if (window.summaryChartInstance) {
+    window.summaryChartInstance.destroy();
+  }
+  
+  if (!summaryData || summaryData.length === 0) {
+    console.log('No summary data available for chart');
+    return;
+  }
+  
+  const labels = [];
+  const values = [];
+  
+  summaryData.forEach(item => {
+    labels.push(item.particular);
+    values.push(item.amount_crores);
+  });
+  
+  // Create chart
+  window.summaryChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Amount (Cr)',
+        data: values,
+        backgroundColor: [
+          'rgba(54, 162, 235, 0.7)',
+          'rgba(75, 192, 192, 0.7)',
+          'rgba(255, 99, 132, 0.7)',
+          'rgba(255, 159, 64, 0.7)'
+        ],
+        borderColor: [
+          'rgba(54, 162, 235, 1)',
+          'rgba(75, 192, 192, 1)',
+          'rgba(255, 99, 132, 1)',
+          'rgba(255, 159, 64, 1)'
+        ],
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: 'Amount (Cr)'
+          }
+        },
+        x: {
+          title: {
+            display: true,
+            text: 'Particular'
+          }
+        }
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return `₹${context.parsed.y.toLocaleString()} Cr`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Creates a stock details chart showing top stocks by amount financed
+ */
+function createStockChart(stocksData) {
+  const ctx = document.getElementById('stockChart');
+  
+  // Check if a chart instance already exists and destroy it
+  if (window.stockChartInstance) {
+    window.stockChartInstance.destroy();
+  }
+  
+  if (!stocksData) {
+    console.log('No stock data available for chart');
+    return;
+  }
+  
+  // Convert stocks object to array and sort by Amount_in_crores in descending order
+  const stocksArray = Object.entries(stocksData).map(([stockName, data]) => {
+    return {
+      name: stockName,
+      amount: data.Amount_in_crores || 0,
+      quantity: data.Quantity_in_crores || 0
+    };
+  }).sort((a, b) => b.amount - a.amount);
+  
+  // Take top 10 stocks
+  const topStocks = stocksArray.slice(0, 10);
+  
+  const labels = topStocks.map(stock => stock.name);
+  const amountData = topStocks.map(stock => stock.amount);
+  const quantityData = topStocks.map(stock => stock.quantity);
+  
+  // Create chart
+  window.stockChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Amount Financed (Cr)',
+          data: amountData,
+          backgroundColor: 'rgba(54, 162, 235, 0.7)',
+          borderColor: 'rgba(54, 162, 235, 1)',
+          borderWidth: 1,
+          yAxisID: 'y'
+        },
+        {
+          label: 'Quantity (Cr)',
+          data: quantityData,
+          backgroundColor: 'rgba(255, 99, 132, 0.7)',
+          borderColor: 'rgba(255, 99, 132, 1)',
+          borderWidth: 1,
+          yAxisID: 'y1'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: {
+          type: 'linear',
+          display: true,
+          position: 'left',
+          title: {
+            display: true,
+            text: 'Amount Financed (Cr)'
+          }
+        },
+        y1: {
+          type: 'linear',
+          display: true,
+          position: 'right',
+          grid: {
+            drawOnChartArea: false
+          },
+          title: {
+            display: true,
+            text: 'Quantity (Cr)'
+          }
+        }
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const label = context.dataset.label || '';
+              const value = context.parsed.y.toFixed(2);
+              return `${label}: ${value} Cr`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
 
     // Initialize when the DOM is fully loaded
     document.addEventListener('DOMContentLoaded', function() {
