@@ -53,44 +53,106 @@
   </div>
 
   <script>
-    let indexData = {}; // folder structure index
-    let currentData = null; // JSON data for selected date
+    const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
-    async function loadIndex() {
+    function populateDropdown(id, items) {
+      const dropdown = document.getElementById(id);
+      dropdown.innerHTML = `<option value="">--Select--</option>`;
+      items.forEach(item => {
+        dropdown.innerHTML += `<option value="${item}">${item}</option>`;
+      });
+    }
+
+    async function fetchJsonList(path) {
       try {
-        const res = await fetch('output_data/index.json');
-        if (!res.ok) throw new Error('Failed to load index.json');
-        indexData = await res.json();
-        populateYearDropdown();
-      } catch (e) {
-        alert('Error loading index.json: ' + e.message);
+        const res = await fetch(path);
+        if (!res.ok) return [];
+        const text = await res.text();
+        const parser = new DOMParser();
+        const html = parser.parseFromString(text, 'text/html');
+        return Array.from(html.querySelectorAll('a'))
+          .map(a => a.getAttribute('href'))
+          .filter(name => name.endsWith('.json'));
+      } catch (err) {
+        console.error(err);
+        return [];
       }
     }
 
-    function populateYearDropdown() {
-      const yearSelect = document.getElementById('yearSelect');
-      yearSelect.innerHTML = `<option value="">--Select Year--</option>`;
-      for (let year of Object.keys(indexData).sort()) {
-        yearSelect.innerHTML += `<option value="${year}">${year}</option>`;
+    async function listFolder(path) {
+      try {
+        const res = await fetch(path);
+        const text = await res.text();
+        const parser = new DOMParser();
+        const html = parser.parseFromString(text, 'text/html');
+        return Array.from(html.querySelectorAll('a'))
+          .map(a => a.getAttribute('href').replace(/\/$/, ''))
+          .filter(name => name !== '../');
+      } catch (err) {
+        return [];
       }
-      resetDropdown('monthSelect');
-      resetDropdown('dateSelect');
-      resetStockInput();
-      clearSummary();
-      clearStockDetails();
     }
 
-    function resetDropdown(id) {
-      document.getElementById(id).innerHTML = `<option value="">--Select--</option>`;
+    async function updateYears() {
+      const years = await listFolder('output_data/');
+      populateDropdown('yearSelect', years);
     }
 
-    function resetStockInput() {
-      document.getElementById('stockInput').value = '';
-      document.getElementById('stockList').innerHTML = '';
+    async function updateMonths(year) {
+      if (!year) return;
+      const months = await listFolder(`output_data/${year}/`);
+      populateDropdown('monthSelect', months);
     }
 
-    function clearSummary() {
-      document.getElementById('summaryList').innerHTML = '';
+    async function updateDates(year, month) {
+      if (!year || !month) return;
+      const files = await listFolder(`output_data/${year}/${month}/`);
+      const jsonFiles = files.filter(name => name.endsWith('.json'));
+      populateDropdown('dateSelect', jsonFiles);
+    }
+
+    async function loadDateData(year, month, file) {
+      try {
+        const res = await fetch(`output_data/${year}/${month}/${file}`);
+        if (!res.ok) throw new Error('Failed to fetch data file');
+        const data = await res.json();
+
+        currentData = data;
+        showSummary(data.summary);
+        populateStockList(Object.keys(data.stocks || {}));
+        clearStockDetails();
+      } catch (err) {
+        alert('Error loading data: ' + err.message);
+      }
+    }
+
+    function showSummary(summaryData) {
+      const list = document.getElementById('summaryList');
+      list.innerHTML = '';
+      if (!summaryData) return;
+      for (let item of summaryData) {
+        list.innerHTML += `<li>${item.particular}: ₹${item.amount_crores} Cr</li>`;
+      }
+    }
+
+    function populateStockList(stocks) {
+      const list = document.getElementById('stockList');
+      list.innerHTML = '';
+      stocks.forEach(stock => {
+        const opt = document.createElement('option');
+        opt.value = stock;
+        list.appendChild(opt);
+      });
+    }
+
+    function showStockDetails(name) {
+      const stock = currentData?.stocks?.[name];
+      if (!stock) return clearStockDetails();
+
+      document.getElementById('stockName').textContent = name;
+      document.getElementById('stockSummary').textContent = stock.summary || '-';
+      document.getElementById('stockC').textContent = stock.total_c?.toFixed(2) || '-';
+      document.getElementById('stockD').textContent = stock.total_d?.toFixed(2) || '-';
     }
 
     function clearStockDetails() {
@@ -100,112 +162,31 @@
       document.getElementById('stockD').textContent = '';
     }
 
-    function populateMonthDropdown(year) {
-      const monthSelect = document.getElementById('monthSelect');
-      monthSelect.innerHTML = `<option value="">--Select Month--</option>`;
-      if (!indexData[year]) return;
-      for (let month of Object.keys(indexData[year]).sort()) {
-        monthSelect.innerHTML += `<option value="${month}">${month}</option>`;
-      }
-      resetDropdown('dateSelect');
-      resetStockInput();
-      clearSummary();
+    document.getElementById('yearSelect').addEventListener('change', async function () {
+      await updateMonths(this.value);
+      populateDropdown('dateSelect', []);
       clearStockDetails();
-    }
-
-    function populateDateDropdown(year, month) {
-      const dateSelect = document.getElementById('dateSelect');
-      dateSelect.innerHTML = `<option value="">--Select Date--</option>`;
-      if (!indexData[year] || !indexData[year][month]) return;
-      for (let fileName of indexData[year][month].sort()) {
-        // Show date without ".json"
-        const dateStr = fileName.replace('.json', '');
-        dateSelect.innerHTML += `<option value="${fileName}">${dateStr}</option>`;
-      }
-      resetStockInput();
-      clearSummary();
-      clearStockDetails();
-    }
-
-    async function loadDateData(year, month, fileName) {
-      if (!year || !month || !fileName) return;
-      try {
-        const url = `output_data/${year}/${month}/${fileName}`;
-        const res = await fetch(url);
-        if (!res.ok) throw new Error('Failed to load ' + fileName);
-        currentData = await res.json();
-
-        showSummary(currentData.summary);
-        populateStockList(Object.keys(currentData.stocks || {}));
-        clearStockDetails();
-      } catch (e) {
-        alert('Error loading data file: ' + e.message);
-      }
-    }
-
-    function showSummary(summaryData) {
-      const summaryBox = document.getElementById('summaryList');
-      summaryBox.innerHTML = '';
-      if (!summaryData) return;
-      for (let row of summaryData) {
-        summaryBox.innerHTML += `<li>${row.particular}: ₹${row.amount_crores} Cr</li>`;
-      }
-    }
-
-    function populateStockList(stockArray) {
-      const stockList = document.getElementById('stockList');
-      stockList.innerHTML = '';
-      for (let stock of stockArray) {
-        const option = document.createElement('option');
-        option.value = stock;
-        stockList.appendChild(option);
-      }
-    }
-
-    function showStockDetails(stockName) {
-      if (!currentData || !currentData.stocks) {
-        clearStockDetails();
-        return;
-      }
-      const stock = currentData.stocks[stockName];
-      if (!stock) {
-        clearStockDetails();
-        return;
-      }
-      document.getElementById('stockName').textContent = stockName;
-      document.getElementById('stockSummary').textContent = stock.summary || '-';
-      document.getElementById('stockC').textContent = stock.total_c?.toFixed(2) || '-';
-      document.getElementById('stockD').textContent = stock.total_d?.toFixed(2) || '-';
-    }
-
-    // Event Listeners
-    document.getElementById('yearSelect').addEventListener('change', function () {
-      const year = this.value;
-      populateMonthDropdown(year);
     });
 
-    document.getElementById('monthSelect').addEventListener('change', function () {
+    document.getElementById('monthSelect').addEventListener('change', async function () {
       const year = document.getElementById('yearSelect').value;
-      const month = this.value;
-      populateDateDropdown(year, month);
+      await updateDates(year, this.value);
+      clearStockDetails();
     });
 
-    document.getElementById('dateSelect').addEventListener('change', function () {
+    document.getElementById('dateSelect').addEventListener('change', async function () {
       const year = document.getElementById('yearSelect').value;
       const month = document.getElementById('monthSelect').value;
-      const fileName = this.value;
-      loadDateData(year, month, fileName);
-      document.getElementById('stockInput').value = '';
-      clearStockDetails();
+      await loadDateData(year, month, this.value);
     });
 
     document.getElementById('stockInput').addEventListener('input', function () {
-      const stockName = this.value;
-      showStockDetails(stockName);
+      showStockDetails(this.value);
     });
 
-    // Load index on page load
-    loadIndex();
+    // Initialize
+    let currentData = null;
+    updateYears();
   </script>
 </body>
 </html>
