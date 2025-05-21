@@ -211,9 +211,8 @@ canvas {
     <p>Top 10 stocks by amount financed</p>
     <canvas id="stockChart"></canvas>
   </div>
-</div>
 
-  <!-- Add just before the closing </div> of the charts-section div (around line 217) -->
+<!-- Add just before the closing </div> of the charts-section div (around line 217) -->
 <div class="chart-container" id="timelineAnalysisContainer">
   <h3>Timeline Analysis</h3>
   
@@ -254,6 +253,8 @@ canvas {
 </div>
   
   <canvas id="timelineChart"></canvas>
+</div>
+
 </div>
 
   <script>
@@ -336,6 +337,8 @@ canvas {
       console.log('Loading years...');
       const years = await fetchIndexJson(FOLDER_PATH);
       populateDropdown('yearSelect', years);
+      populateDropdown('startYearSelect', years);
+      populateDropdown('endYearSelect', years);
     }
 
     /**
@@ -349,21 +352,38 @@ canvas {
       populateDropdown('monthSelect', months);
     }
 
-    /**
-     * Updates the dates dropdown based on selected year and month
-     */
+    async function loadStartMonths(year) {
+      if (!year) return;
+      const months = await fetchIndexJson(`${FOLDER_PATH}/${year}`);
+      populateDropdown('startMonthSelect', months);
+    }
+
+    async function loadEndMonths(year) {
+      if (!year) return;
+      const months = await fetchIndexJson(`${FOLDER_PATH}/${year}`);
+      populateDropdown('endMonthSelect', months);
+    }
+
     async function loadDates(year, month) {
-      console.log(`Loading dates for ${year}/${month}...`);
       if (!year || !month) return;
-      
       const files = await fetchIndexJson(`${FOLDER_PATH}/${year}/${month}`);
       const dateFiles = files.filter(file => file.endsWith('.json') && file !== 'index.json');
       populateDropdown('dateSelect', dateFiles);
     }
 
-    /**
-     * Loads JSON data for the selected date
-     */
+    async function loadStartDates(year, month) {
+      if (!year || !month) return;
+      const files = await fetchIndexJson(`${FOLDER_PATH}/${year}/${month}`);
+      const dateFiles = files.filter(file => file.endsWith('.json') && file !== 'index.json');
+      populateDropdown('startDateSelect', dateFiles);
+    }
+
+    async function loadEndDates(year, month) {
+      if (!year || !month) return;
+      const files = await fetchIndexJson(`${FOLDER_PATH}/${year}/${month}`);
+      const dateFiles = files.filter(file => file.endsWith('.json') && file !== 'index.json');
+      populateDropdown('endDateSelect', dateFiles);
+    }
    /**
  * Loads JSON data for the selected date
  */
