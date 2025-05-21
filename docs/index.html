@@ -775,6 +775,9 @@ function createIndividualStockChart(stockName, stockData) {
 /**
  * Loads data for the timeline across a date range
  */
+/**
+ * Loads data for the timeline across a date range
+ */
 async function loadTimelineData(startYear, startMonth, startDate, endYear, endMonth, endDate) {
   console.log(`Loading timeline data from ${startYear}/${startMonth}/${startDate} to ${endYear}/${endMonth}/${endDate}`);
   showLoading();
@@ -905,12 +908,7 @@ async function loadTimelineData(startYear, startMonth, startDate, endYear, endMo
     }
     
     console.log(`Timeline data load complete: ${successCount} successful, ${failCount} failed`);
-    
-    // Populate stock dropdown with all found stocks
-    populateTimelineStockDropdown(Array.from(allStocks));
-    
-    // Sort timeline data by date
-    timelineData.sort((a, b) => new Date(a.date) - new Date(b.date));
+  
     
     if (selectedStock && stockTimelineData.length > 0) {
       // Sort stock timeline data
