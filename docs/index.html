@@ -749,14 +749,23 @@ function createIndividualStockChart(stockName, stockData) {
 /**
  * Loads data for the timeline across a date range
  */
+/**
+ * Loads data for the timeline across a date range
+ */
 async function loadTimelineData(startYear, startMonth, startDate, endYear, endMonth, endDate) {
   console.log(`Loading timeline data from ${startYear}/${startMonth}/${startDate} to ${endYear}/${endMonth}/${endDate}`);
   showLoading();
   
   try {
-    // Convert date strings to Date objects for comparison
-    const startDateObj = new Date(`${startYear}-${startMonth}-${startDate.replace('.json', '')}`);
-    const endDateObj = new Date(`${endYear}-${endMonth}-${endDate.replace('.json', '')}`);
+    // Parse dates properly, removing .json extension from date files
+    const startDay = startDate.replace('.json', '');
+    const endDay = endDate.replace('.json', '');
+    
+    // Convert to standard format for comparison
+    const startDateObj = new Date(`${startYear}-${startMonth}-${startDay}`);
+    const endDateObj = new Date(`${endYear}-${endMonth}-${endDay}`);
+    
+    console.log(`Date range: ${startDateObj.toISOString()} to ${endDateObj.toISOString()}`);
     
     if (endDateObj < startDateObj) {
       throw new Error('End date must be after start date');
@@ -764,52 +773,98 @@ async function loadTimelineData(startYear, startMonth, startDate, endYear, endMo
     
     // Collect data for each date in the range
     const timelineData = [];
+    let successCount = 0;
+    let failCount = 0;
     
-    // Process date range
-    let currentDate = new Date(startDateObj);
+    // First, get all available years
+    const yearsResponse = await fetch(`${FOLDER_PATH}/index.json`);
+    const yearsData = await yearsResponse.json();
+    const availableYears = yearsData.items;
     
-    while (currentDate <= endDateObj) {
-      const year = currentDate.getFullYear().toString();
-      // Month is 1-based in UI but 0-based in JS Date
-      const month = (currentDate.getMonth() + 1).toString().padStart(2, '0');
-      const day = currentDate.getDate().toString().padStart(2, '0');
+    for (const year of availableYears) {
+      // Skip years outside our range
+      if (year < startYear || year > endYear) continue;
       
-      const dateFile = `${day}.json`;
-      
-      try {
-        const filePath = `${FOLDER_PATH}/${year}/${month}/${dateFile}`;
-        const response = await fetch(filePath);
-        
-        if (response.ok) {
-          const data = await response.json();
-          
-          if (data && data.summary) {
-            timelineData.push({
-              date: `${year}-${month}-${day}`,
-              formattedDate: `${day}-${month}-${year}`,
-              data: data.summary
-            });
-          }
-        } else {
-          console.log(`No data available for ${filePath}`);
-        }
-      } catch (err) {
-        console.log(`Error fetching data for ${year}/${month}/${dateFile}: ${err.message}`);
+      // Get months for this year
+      const monthsResponse = await fetch(`${FOLDER_PATH}/${year}/index.json`);
+      if (!monthsResponse.ok) {
+        console.log(`Could not load months for year ${year}`);
+        continue;
       }
       
-      // Move to next day
-      currentDate.setDate(currentDate.getDate() + 1);
+      const monthsData = await monthsResponse.json();
+      const availableMonths = monthsData.items;
+      
+      for (const month of availableMonths) {
+        // Skip months outside our range
+        if ((year === startYear && month < startMonth) || 
+            (year === endYear && month > endMonth)) {
+          continue;
+        }
+        
+        // Get dates for this month
+        const datesResponse = await fetch(`${FOLDER_PATH}/${year}/${month}/index.json`);
+        if (!datesResponse.ok) {
+          console.log(`Could not load dates for ${year}/${month}`);
+          continue;
+        }
+        
+        const datesData = await datesResponse.json();
+        const availableDates = datesData.items.filter(file => file.endsWith('.json') && file !== 'index.json');
+        
+        for (const dateFile of availableDates) {
+          const day = dateFile.replace('.json', '');
+          const currentDate = new Date(`${year}-${month}-${day}`);
+          
+          // Skip dates outside our range
+          if (currentDate < startDateObj || currentDate > endDateObj) {
+            continue;
+          }
+          
+          // Fetch data for this specific date
+          try {
+            const filePath = `${FOLDER_PATH}/${year}/${month}/${dateFile}`;
+            console.log(`Attempting to fetch: ${filePath}`);
+            
+            const response = await fetch(filePath);
+            
+            if (!response.ok) {
+              console.log(`No data available at ${filePath}`);
+              failCount++;
+              continue;
+            }
+            
+            const data = await response.json();
+            
+            if (data && data.summary && data.summary.length > 0) {
+              console.log(`Found data for ${year}-${month}-${day}`);
+              timelineData.push({
+                date: `${year}-${month}-${day}`,
+                formattedDate: `${day}-${month}-${year}`,
+                data: data.summary
+              });
+              successCount++;
+            } else {
+              console.log(`No summary data in file at ${filePath}`);
+              failCount++;
+            }
+          } catch (err) {
+            console.log(`Error processing ${year}/${month}/${dateFile}: ${err.message}`);
+            failCount++;
+          }
+        }
+      }
     }
+    
+    console.log(`Timeline data load complete: ${successCount} successful, ${failCount} failed`);
     
     // Sort timeline data by date
     timelineData.sort((a, b) => new Date(a.date) - new Date(b.date));
     
-    console.log(`Loaded ${timelineData.length} days of data for timeline`);
-    
     if (timelineData.length > 0) {
       createTimelineChart(timelineData);
     } else {
-      throw new Error('No data found in the selected date range');
+      throw new Error(`No data found in the selected date range. Attempted to load data between ${startDateObj.toDateString()} and ${endDateObj.toDateString()}`);
     }
     
   } catch (error) {
@@ -1068,20 +1123,25 @@ function populateTimelineDropdown(id, items) {
     }
   });
   
-  document.getElementById('loadTimelineBtn').addEventListener('click', function() {
-    const startYear = document.getElementById('startYearSelect').value;
-    const startMonth = document.getElementById('startMonthSelect').value;
-    const startDate = document.getElementById('startDateSelect').value;
-    const endYear = document.getElementById('endYearSelect').value;
-    const endMonth = document.getElementById('endMonthSelect').value;
-    const endDate = document.getElementById('endDateSelect').value;
+  // Replace the loadTimelineBtn event listener with this:
+document.getElementById('loadTimelineBtn').addEventListener('click', function() {
+  const startYear = document.getElementById('startYearSelect').value;
+  const startMonth = document.getElementById('startMonthSelect').value;
+  const startDate = document.getElementById('startDateSelect').value;
+  const endYear = document.getElementById('endYearSelect').value;
+  const endMonth = document.getElementById('endMonthSelect').value;
+  const endDate = document.getElementById('endDateSelect').value;
+  
+  if (startYear && startMonth && startDate && endYear && endMonth && endDate) {
+    // Log exactly what we're working with
+    console.log("Start date components:", startYear, startMonth, startDate);
+    console.log("End date components:", endYear, endMonth, endDate);
     
-    if (startYear && startMonth && startDate && endYear && endMonth && endDate) {
-      loadTimelineData(startYear, startMonth, startDate, endYear, endMonth, endDate);
-    } else {
-      alert('Please select complete start and end dates');
-    }
-  });
+    loadTimelineData(startYear, startMonth, startDate, endYear, endMonth, endDate);
+  } else {
+    alert('Please select complete start and end dates');
+  }
+});
       
       // Load the initial years data
       loadYears();
