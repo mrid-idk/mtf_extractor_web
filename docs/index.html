@@ -1049,6 +1049,103 @@ function createStockTimelineChart(stockTimeData, stockName) {
   });
 }
 
+/**
+ * Creates a timeline chart for a specific stock showing trends over the selected date range
+ */
+function createStockTimelineChart(stockTimeData, stockName) {
+  const ctx = document.getElementById('timelineChart');
+  
+  // Check if a chart instance already exists and destroy it
+  if (window.timelineChartInstance) {
+    window.timelineChartInstance.destroy();
+  }
+  
+  if (!stockTimeData || stockTimeData.length === 0) {
+    console.log('No stock timeline data available for chart');
+    return;
+  }
+  
+  // Prepare data for charting
+  const labels = stockTimeData.map(item => item.formattedDate);
+  
+  // Create datasets for quantity and amount
+  const quantityData = stockTimeData.map(item => item.stockData.Quantity_in_crores || 0);
+  const amountData = stockTimeData.map(item => item.stockData.Amount_in_crores || 0);
+  
+ /**
+ * Creates a timeline chart for a specific stock
+ */
+function createStockTimelineChart(stockTimelineData, stockName) {
+  const ctx = document.getElementById('timelineChart');
+  
+  // Check if a chart instance already exists and destroy it
+  if (window.timelineChartInstance) {
+    window.timelineChartInstance.destroy();
+  }
+  
+  if (!stockTimelineData || stockTimelineData.length === 0) {
+    console.log('No timeline data available for this stock');
+    return;
+  }
+  
+  // Prepare data for charting
+  const labels = stockTimelineData.map(item => item.formattedDate);
+  const amounts = stockTimelineData.map(item => item.amount);
+  
+  // Create chart
+  window.timelineChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: `${stockName} Amount (Cr)`,
+        data: amounts,
+        borderColor: 'rgba(255, 99, 132, 1)',
+        backgroundColor: 'rgba(255, 99, 132, 0.2)',
+        fill: false,
+        tension: 0.1
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: {
+          beginAtZero: false,
+          title: {
+            display: true,
+            text: 'Amount (Cr)'
+          }
+        },
+        x: {
+          title: {
+            display: true,
+            text: 'Date'
+          },
+          ticks: {
+            maxRotation: 45,
+            minRotation: 45
+          }
+        }
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return `Amount: ₹${context.parsed.y.toLocaleString()} Cr`;
+            }
+          }
+        },
+        legend: {
+          position: 'top',
+        },
+        title: {
+          display: true,
+          text: `Timeline for ${stockName}`
+        }
+      }
+    }
+  });
+}
   
   // Create datasets for each particular
   const datasets = [];
