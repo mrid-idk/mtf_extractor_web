@@ -761,103 +761,93 @@ function createIndividualStockChart(stockName, stockData) {
  * Loads data for the timeline across a date range with optional stock filtering
 /**
 /**
+/**
  * Loads data for the timeline across a date range
  */
 async function loadTimelineData(startYear, startMonth, startDate, endYear, endMonth, endDate) {
   console.log(`Loading timeline data from ${startYear}/${startMonth}/${startDate} to ${endYear}/${endMonth}/${endDate}`);
   showLoading();
-  
-  // Get selected stock (if any)
+
   const selectedStock = document.getElementById('timelineStockSelect').value;
   if (selectedStock) {
     console.log(`Filtering for stock: ${selectedStock}`);
   }
-  
+
   try {
-    // Parse dates properly, removing .json extension from date files
     const startDay = startDate.replace('.json', '');
     const endDay = endDate.replace('.json', '');
-    
-    // Convert to standard format for comparison
+
     const startDateObj = new Date(`${startYear}-${startMonth}-${startDay}`);
     const endDateObj = new Date(`${endYear}-${endMonth}-${endDay}`);
-    
+
     console.log(`Date range: ${startDateObj.toISOString()} to ${endDateObj.toISOString()}`);
-    
+
     if (endDateObj < startDateObj) {
       throw new Error('End date must be after start date');
     }
-    
-    // Collect data for each date in the range
+
     const timelineData = [];
-    const stockTimelineData = []; // For stock-specific tracking
+    const stockTimelineData = [];
     let successCount = 0;
     let failCount = 0;
-    const allStocks = new Set(); // Track all stocks for dropdown
-    
-    // First, get all available years
+    const allStocks = new Set();
+
     const yearsResponse = await fetch(`${FOLDER_PATH}/index.json?_cache=${new Date().getTime()}`);
     if (!yearsResponse.ok) {
       throw new Error('Failed to fetch years. Check if your data path is correct.');
     }
     const yearsData = await yearsResponse.json();
     const availableYears = yearsData.items;
-    
+
     for (const year of availableYears) {
-      // Skip years outside our range
       if (year < startYear || year > endYear) continue;
-      
-      // Get months for this year
+
       const monthsResponse = await fetch(`${FOLDER_PATH}/${year}/index.json?_cache=${new Date().getTime()}`);
       if (!monthsResponse.ok) {
         console.log(`Could not load months for year ${year}`);
         continue;
       }
-      
+
       const monthsData = await monthsResponse.json();
       const availableMonths = monthsData.items;
-      
+
       for (const month of availableMonths) {
-        // Skip months outside our range
-        if ((year === startYear && month < startMonth) || 
+        if ((year === startYear && month < startMonth) ||
             (year === endYear && month > endMonth)) {
           continue;
         }
-        
-        // Get dates for this month
+
         const datesResponse = await fetch(`${FOLDER_PATH}/${year}/${month}/index.json?_cache=${new Date().getTime()}`);
         if (!datesResponse.ok) {
           console.log(`Could not load dates for ${year}/${month}`);
           continue;
         }
-        
+
         const datesData = await datesResponse.json();
         const availableDates = datesData.items.filter(file => file.endsWith('.json') && file !== 'index.json');
-        
+
         for (const dateFile of availableDates) {
           const day = dateFile.replace('.json', '');
           const currentDate = new Date(`${year}-${month}-${day}`);
-          
-          // Skip dates outside our range
+
           if (currentDate < startDateObj || currentDate > endDateObj) {
             continue;
           }
-          
-          // Fetch data for this specific date
+
           try {
             const filePath = `${FOLDER_PATH}/${year}/${month}/${dateFile}?_cache=${new Date().getTime()}`;
             console.log(`Attempting to fetch: ${filePath}`);
-            
+
             const response = await fetch(filePath);
-            
+
             if (!response.ok) {
               console.log(`No data available at ${filePath}`);
               failCount++;
               continue;
             }
-            
+
             const data = await response.json();
-            
+
             if (data && data.summary && data.summary.length > 0) {
               console.log(`Found data for ${year}-${month}-${day}`);
               timelineData.push({
@@ -866,12 +856,10 @@ async function loadTimelineData(startYear, startMonth, startDate, endYear, endMo
                 data: data.summary
               });
               successCount++;
-              
-              // Collect stock names for dropdown
+
               if (data.stocks) {
                 Object.keys(data.stocks).forEach(stock => allStocks.add(stock));
-                
-                // If a stock is selected, collect its data
+
                 if (selectedStock && data.stocks[selectedStock]) {
                   stockTimelineData.push({
                     date: `${year}-${month}-${day}`,
@@ -891,20 +879,15 @@ async function loadTimelineData(startYear, startMonth, startDate, endYear, endMo
         }
       }
     }
-    
+
     console.log(`Timeline data load complete: ${successCount} successful, ${failCount} failed`);
-    
-    // Populate stock dropdown with all found stocks
+
     populateTimelineStockDropdown(Array.from(allStocks));
-    
-    // Sort timeline data by date
+
     timelineData.sort((a, b) => new Date(a.date) - new Date(b.date));
-    
+
     if (selectedStock && stockTimelineData.length > 0) {
-      // Sort stock timeline data
       stockTimelineData.sort((a, b) => new Date(a.date) - new Date(b.date));
-      
-      // Create both timeline charts
       createTimelineChart(timelineData);
       createStockTimelineChart(stockTimelineData, selectedStock);
     } else if (timelineData.length > 0) {
@@ -912,7 +895,7 @@ async function loadTimelineData(startYear, startMonth, startDate, endYear, endMo
     } else {
       throw new Error(`No data found in the selected date range. Attempted to load data between ${startDateObj.toDateString()} and ${endDateObj.toDateString()}`);
     }
-    
+
   } catch (error) {
     console.error('Error loading timeline data:', error);
     showError(`Failed to load timeline data: ${error.message}`);
@@ -920,6 +903,45 @@ async function loadTimelineData(startYear, startMonth, startDate, endYear, endMo
     hideLoading();
   }
 }
+
+
+/**
+ * Populates the stock dropdown in the timeline section with available stock names
+ * @param {string[]} stockList - Array of stock names
+ */
+function populateTimelineStockDropdown(stockList) {
+  const dropdown = document.getElementById('timelineStockSelect');
+  if (!dropdown) {
+    console.error('Dropdown element with ID timelineStockSelect not found');
+    return;
+  }
+
+  // Save current selection
+  const previousValue = dropdown.value;
+
+  // Clear existing options
+  dropdown.innerHTML = '';
+
+  // Add default empty option
+  const defaultOption = document.createElement('option');
+  defaultOption.value = '';
+  defaultOption.textContent = '-- Select a Stock --';
+  dropdown.appendChild(defaultOption);
+
+  // Add stock options
+  stockList.sort().forEach(stock => {
+    const option = document.createElement('option');
+    option.value = stock;
+    option.textContent = stock;
+    dropdown.appendChild(option);
+  });
+
+  // Restore previous selection if still valid
+  if (stockList.includes(previousValue)) {
+    dropdown.value = previousValue;
+  }
+}
+
 
 /**
  * Creates a timeline chart for a specific stock showing trends over the selected date range
