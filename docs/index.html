@@ -1050,29 +1050,6 @@ function createStockTimelineChart(stockTimeData, stockName) {
 }
 
 /**
- * Creates a timeline chart for a specific stock showing trends over the selected date range
- */
-function createStockTimelineChart(stockTimeData, stockName) {
-  const ctx = document.getElementById('timelineChart');
-  
-  // Check if a chart instance already exists and destroy it
-  if (window.timelineChartInstance) {
-    window.timelineChartInstance.destroy();
-  }
-  
-  if (!stockTimeData || stockTimeData.length === 0) {
-    console.log('No stock timeline data available for chart');
-    return;
-  }
-  
-  // Prepare data for charting
-  const labels = stockTimeData.map(item => item.formattedDate);
-  
-  // Create datasets for quantity and amount
-  const quantityData = stockTimeData.map(item => item.stockData.Quantity_in_crores || 0);
-  const amountData = stockTimeData.map(item => item.stockData.Amount_in_crores || 0);
-  
- /**
  * Creates a timeline chart for a specific stock
  */
 function createStockTimelineChart(stockTimelineData, stockName) {
