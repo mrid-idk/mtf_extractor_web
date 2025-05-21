@@ -758,11 +758,8 @@ function createIndividualStockChart(stockName, stockData) {
 /**
  * Loads data for the timeline across a date range
 /**
+ */**
  * Loads data for the timeline across a date range with optional stock filtering
-/**
-/**
-/**
- * Loads data for the timeline across a date range
  */
 async function loadTimelineData(startYear, startMonth, startDate, endYear, endMonth, endDate) {
   console.log(`Loading timeline data from ${startYear}/${startMonth}/${startDate} to ${endYear}/${endMonth}/${endDate}`);
@@ -791,6 +788,7 @@ async function loadTimelineData(startYear, startMonth, startDate, endYear, endMo
     let successCount = 0;
     let failCount = 0;
     const allStocks = new Set();
+    const allParticulars = new Set(); // Track all summary particulars for general timeline
 
     const yearsResponse = await fetch(`${FOLDER_PATH}/index.json?_cache=${new Date().getTime()}`);
     if (!yearsResponse.ok) {
@@ -850,16 +848,28 @@ async function loadTimelineData(startYear, startMonth, startDate, endYear, endMo
 
             if (data && data.summary && data.summary.length > 0) {
               console.log(`Found data for ${year}-${month}-${day}`);
+              
+              // Add data for the main timeline chart
               timelineData.push({
                 date: `${year}-${month}-${day}`,
                 formattedDate: `${day}-${month}-${year}`,
                 data: data.summary
               });
+              
+              // Collect all particulars for the timeline chart
+              data.summary.forEach(item => {
+                if (item.particular) {
+                  allParticulars.add(item.particular);
+                }
+              });
+              
               successCount++;
 
+              // Process stock data if available
               if (data.stocks) {
                 Object.keys(data.stocks).forEach(stock => allStocks.add(stock));
 
+                // If a specific stock is selected, collect its data
                 if (selectedStock && data.stocks[selectedStock]) {
                   stockTimelineData.push({
                     date: `${year}-${month}-${day}`,
@@ -882,16 +892,22 @@ async function loadTimelineData(startYear, startMonth, startDate, endYear, endMo
 
     console.log(`Timeline data load complete: ${successCount} successful, ${failCount} failed`);
 
+    // Populate stock dropdown with all available stocks
     populateTimelineStockDropdown(Array.from(allStocks));
 
+    // Sort the timeline data by date
     timelineData.sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    if (selectedStock && stockTimelineData.length > 0) {
-      stockTimelineData.sort((a, b) => new Date(a.date) - new Date(b.date));
-      createTimelineChart(timelineData);
-      createStockTimelineChart(stockTimelineData, selectedStock);
-    } else if (timelineData.length > 0) {
-      createTimelineChart(timelineData);
+    // Always create the main timeline chart if data is available
+    if (timelineData.length > 0) {
+      createTimelineChart(timelineData, Array.from(allParticulars));
+      
+      // Additionally create the stock-specific chart if a stock is selected
+      if (selectedStock && stockTimelineData.length > 0) {
+        stockTimelineData.sort((a, b) => new Date(a.date) - new Date(b.date));
+        // Create a separate container for the stock chart
+        createStockChart('stockTimelineChart', stockTimelineData, selectedStock);
+      }
     } else {
       throw new Error(`No data found in the selected date range. Attempted to load data between ${startDateObj.toDateString()} and ${endDateObj.toDateString()}`);
     }
@@ -903,7 +919,6 @@ async function loadTimelineData(startYear, startMonth, startDate, endYear, endMo
     hideLoading();
   }
 }
-
 
 /**
  * Populates the stock dropdown in the timeline section with available stock names
@@ -942,11 +957,12 @@ function populateTimelineStockDropdown(stockList) {
   }
 }
 
-
 /**
- * Creates a timeline chart for a specific stock showing trends over the selected date range
+ * Creates a timeline chart showing all particulars over time
+ * @param {Array} timelineData - Array of daily summary data
+ * @param {Array} allParticulars - Array of all particulars to show
  */
-function createStockTimelineChart(stockTimeData, stockName) {
+function createTimelineChart(timelineData, allParticulars) {
   const ctx = document.getElementById('timelineChart');
   
   // Check if a chart instance already exists and destroy it
@@ -954,175 +970,13 @@ function createStockTimelineChart(stockTimeData, stockName) {
     window.timelineChartInstance.destroy();
   }
   
-  if (!stockTimeData || stockTimeData.length === 0) {
-    console.log('No stock timeline data available for chart');
+  if (!timelineData || timelineData.length === 0) {
+    console.log('No timeline data available for chart');
     return;
   }
   
   // Prepare data for charting
-  const labels = stockTimeData.map(item => item.formattedDate);
-  
-  // Create datasets for quantity and amount
-  const quantityData = stockTimeData.map(item => item.stockData.Quantity_in_crores || 0);
-  const amountData = stockTimeData.map(item => item.stockData.Amount_in_crores || 0);
-  
-  // Create chart
-  window.timelineChartInstance = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [
-        {
-          label: 'Quantity Financed (Cr)',
-          data: quantityData,
-          borderColor: 'rgba(54, 162, 235, 1)',
-          backgroundColor: 'rgba(54, 162, 235, 0.2)',
-          fill: false,
-          tension: 0.1,
-          yAxisID: 'y'
-        },
-        {
-          label: 'Amount Financed (Cr)',
-          data: amountData,
-          borderColor: 'rgba(255, 99, 132, 1)',
-          backgroundColor: 'rgba(255, 99, 132, 0.2)',
-          fill: false,
-          tension: 0.1,
-          yAxisID: 'y1'
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      scales: {
-        y: {
-          type: 'linear',
-          display: true,
-          position: 'left',
-          title: {
-            display: true,
-            text: 'Quantity (Cr)'
-          }
-        },
-        y1: {
-          type: 'linear',
-          display: true,
-          position: 'right',
-          grid: {
-            drawOnChartArea: false
-          },
-          title: {
-            display: true,
-            text: 'Amount (Cr)'
-          }
-        },
-        x: {
-          title: {
-            display: true,
-            text: 'Date'
-          },
-          ticks: {
-            maxRotation: 45,
-            minRotation: 45
-          }
-        }
-      },
-      plugins: {
-        title: {
-          display: true,
-          text: `Timeline for ${stockName}`
-        },
-        tooltip: {
-          callbacks: {
-            label: function(context) {
-              const label = context.dataset.label || '';
-              const value = context.parsed.y.toFixed(2);
-              return `${label}: ${value} Cr`;
-            }
-          }
-        },
-        legend: {
-          position: 'top',
-        }
-      }
-    }
-  });
-}
-
-/**
- * Creates a timeline chart for a specific stock
- */
-function createStockTimelineChart(stockTimelineData, stockName) {
-  const ctx = document.getElementById('timelineChart');
-  
-  // Check if a chart instance already exists and destroy it
-  if (window.timelineChartInstance) {
-    window.timelineChartInstance.destroy();
-  }
-  
-  if (!stockTimelineData || stockTimelineData.length === 0) {
-    console.log('No timeline data available for this stock');
-    return;
-  }
-  
-  // Prepare data for charting
-  const labels = stockTimelineData.map(item => item.formattedDate);
-  const amounts = stockTimelineData.map(item => item.amount);
-  
-  // Create chart
-  window.timelineChartInstance = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: `${stockName} Amount (Cr)`,
-        data: amounts,
-        borderColor: 'rgba(255, 99, 132, 1)',
-        backgroundColor: 'rgba(255, 99, 132, 0.2)',
-        fill: false,
-        tension: 0.1
-      }]
-    },
-    options: {
-      responsive: true,
-      scales: {
-        y: {
-          beginAtZero: false,
-          title: {
-            display: true,
-            text: 'Amount (Cr)'
-          }
-        },
-        x: {
-          title: {
-            display: true,
-            text: 'Date'
-          },
-          ticks: {
-            maxRotation: 45,
-            minRotation: 45
-          }
-        }
-      },
-      plugins: {
-        tooltip: {
-          callbacks: {
-            label: function(context) {
-              return `Amount: ₹${context.parsed.y.toLocaleString()} Cr`;
-            }
-          }
-        },
-        legend: {
-          position: 'top',
-        },
-        title: {
-          display: true,
-          text: `Timeline for ${stockName}`
-        }
-      }
-    }
-  });
-}
+  const labels = timelineData.map(item => item.formattedDate);
   
   // Create datasets for each particular
   const datasets = [];
@@ -1136,7 +990,7 @@ function createStockTimelineChart(stockTimelineData, stockName) {
     'rgba(201, 203, 207, 1)'
   ];
   
-  Array.from(allParticulars).forEach((particular, index) => {
+  allParticulars.forEach((particular, index) => {
     const data = timelineData.map(day => {
       const summaryItem = day.data.find(item => item.particular === particular);
       return summaryItem ? summaryItem.amount_crores : null;
@@ -1190,6 +1044,88 @@ function createStockTimelineChart(stockTimelineData, stockName) {
         },
         legend: {
           position: 'top',
+        },
+        title: {
+          display: true,
+          text: 'MTF Data Timeline'
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Creates a chart for a specific stock showing trends over the selected date range
+ * @param {string} containerId - ID of the canvas element to render the chart
+ * @param {Array} stockTimelineData - Array of stock data by day
+ * @param {string} stockName - Name of the stock to display
+ */
+function createStockChart(containerId, stockTimelineData, stockName) {
+  const ctx = document.getElementById(containerId);
+  
+  // Check if a chart instance already exists and destroy it
+  if (window.stockChartInstance) {
+    window.stockChartInstance.destroy();
+  }
+  
+  if (!stockTimelineData || stockTimelineData.length === 0) {
+    console.log('No timeline data available for this stock');
+    return;
+  }
+  
+  // Prepare data for charting
+  const labels = stockTimelineData.map(item => item.formattedDate);
+  const amounts = stockTimelineData.map(item => item.amount);
+  
+  // Create chart
+  window.stockChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: `${stockName} Amount (Cr)`,
+        data: amounts,
+        borderColor: 'rgba(255, 99, 132, 1)',
+        backgroundColor: 'rgba(255, 99, 132, 0.2)',
+        fill: false,
+        tension: 0.1
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: {
+          beginAtZero: false,
+          title: {
+            display: true,
+            text: 'Amount (Cr)'
+          }
+        },
+        x: {
+          title: {
+            display: true,
+            text: 'Date'
+          },
+          ticks: {
+            maxRotation: 45,
+            minRotation: 45
+          }
+        }
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return `Amount: ₹${context.parsed.y.toLocaleString()} Cr`;
+            }
+          }
+        },
+        legend: {
+          position: 'top',
+        },
+        title: {
+          display: true,
+          text: `Timeline for ${stockName}`
         }
       }
     }
@@ -1209,58 +1145,57 @@ function populateTimelineDropdown(id, items) {
     });
   }
 }
-    // Initialize when the DOM is fully loaded
-    document.addEventListener('DOMContentLoaded', function() {
-      console.log('Initializing MTF Data Dashboard...');
-      
-      // Set up the Year dropdown change event
-      document.getElementById('yearSelect').addEventListener('change', function() {
-        const selectedYear = this.value;
-        console.log(`Year selection changed to: ${selectedYear}`);
-        
-        // Reset dependent dropdowns
-        document.getElementById('monthSelect').innerHTML = '<option value="">--Select--</option>';
-        document.getElementById('dateSelect').innerHTML = '<option value="">--Select--</option>';
-        clearStockDetails();
-        
-        if (selectedYear) {
-          loadMonths(selectedYear);
-        }
-      });
-      
-      // Set up the Month dropdown change event
-      document.getElementById('monthSelect').addEventListener('change', function() {
-        const selectedYear = document.getElementById('yearSelect').value;
-        const selectedMonth = this.value;
-        console.log(`Month selection changed to: ${selectedMonth}`);
-        
-        // Reset dependent dropdown
-        document.getElementById('dateSelect').innerHTML = '<option value="">--Select--</option>';
-        clearStockDetails();
-        
-        if (selectedYear && selectedMonth) {
-          loadDates(selectedYear, selectedMonth);
-        }
-      });
-      
-      // Set up the Date dropdown change event
-      document.getElementById('dateSelect').addEventListener('change', function() {
-        const selectedYear = document.getElementById('yearSelect').value;
-        const selectedMonth = document.getElementById('monthSelect').value;
-        const selectedDate = this.value;
-        console.log(`Date selection changed to: ${selectedDate}`);
-        
-        if (selectedYear && selectedMonth && selectedDate) {
-          loadStockData(selectedYear, selectedMonth, selectedDate);
-        }
-      });
-      
-      // Set up the stock search input event
-      document.getElementById('stockInput').addEventListener('input', function() {
-        displayStockDetails(this.value);
-      });
 
-      // Add this code right before loadYears() in the DOMContentLoaded event handler (around line 650)
+// Initialize when the DOM is fully loaded
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('Initializing MTF Data Dashboard...');
+  
+  // Set up the Year dropdown change event
+  document.getElementById('yearSelect').addEventListener('change', function() {
+    const selectedYear = this.value;
+    console.log(`Year selection changed to: ${selectedYear}`);
+    
+    // Reset dependent dropdowns
+    document.getElementById('monthSelect').innerHTML = '<option value="">--Select--</option>';
+    document.getElementById('dateSelect').innerHTML = '<option value="">--Select--</option>';
+    clearStockDetails();
+    
+    if (selectedYear) {
+      loadMonths(selectedYear);
+    }
+  });
+  
+  // Set up the Month dropdown change event
+  document.getElementById('monthSelect').addEventListener('change', function() {
+    const selectedYear = document.getElementById('yearSelect').value;
+    const selectedMonth = this.value;
+    console.log(`Month selection changed to: ${selectedMonth}`);
+    
+    // Reset dependent dropdown
+    document.getElementById('dateSelect').innerHTML = '<option value="">--Select--</option>';
+    clearStockDetails();
+    
+    if (selectedYear && selectedMonth) {
+      loadDates(selectedYear, selectedMonth);
+    }
+  });
+  
+  // Set up the Date dropdown change event
+  document.getElementById('dateSelect').addEventListener('change', function() {
+    const selectedYear = document.getElementById('yearSelect').value;
+    const selectedMonth = document.getElementById('monthSelect').value;
+    const selectedDate = this.value;
+    console.log(`Date selection changed to: ${selectedDate}`);
+    
+    if (selectedYear && selectedMonth && selectedDate) {
+      loadStockData(selectedYear, selectedMonth, selectedDate);
+    }
+  });
+  
+  // Set up the stock search input event
+  document.getElementById('stockInput').addEventListener('input', function() {
+    displayStockDetails(this.value);
+  });
 
   // Initialize timeline controls
   document.getElementById('startYearSelect').addEventListener('change', function() {
@@ -1342,70 +1277,70 @@ function populateTimelineDropdown(id, items) {
         });
     }
   });
-  
- // Add this function to populate the timeline stock dropdown
-function populateTimelineStockDropdown() {
-  // Get all stocks from all files between the selected dates
-  const startYear = document.getElementById('startYearSelect').value;
-  const startMonth = document.getElementById('startMonthSelect').value;
-  const startDate = document.getElementById('startDateSelect').value;
-  const endYear = document.getElementById('endYearSelect').value;
-  const endMonth = document.getElementById('endMonthSelect').value;
-  const endDate = document.getElementById('endDateSelect').value;
-  
-  if (!startYear || !startMonth || !startDate || !endYear || !endMonth || !endDate) {
-    console.log('Cannot load stocks: date range not fully selected');
-    return;
-  }
-  
-  // If all dates are selected, fetch the first day's data to populate stocks
-  showLoading();
-  const filePath = `${FOLDER_PATH}/${startYear}/${startMonth}/${startDate}`;
-  
-  fetch(filePath)
-    .then(response => {
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-      return response.json();
-    })
-    .then(data => {
-      if (data && data.stocks) {
-        const stocksList = Object.keys(data.stocks).sort();
-        populateStockList(stocksList);
-      } else {
-        console.log('No stock data found in the first day');
-      }
-    })
-    .catch(error => {
-      console.error('Error loading stocks for timeline dropdown:', error);
-    })
-    .finally(() => {
-      hideLoading();
-    });
-}
 
-// Populate the datalist for timeline stock selection
-// Function to populate the timeline stock dropdown
-function populateTimelineStockDropdown() {
-  const startYear = document.getElementById('startYearSelect').value;
-  const startMonth = document.getElementById('startMonthSelect').value;
-  const startDate = document.getElementById('startDateSelect').value;
+  // Add event listeners for the start date selector to populate the stock list
+  document.getElementById('startDateSelect').addEventListener('change', function() {
+    const startYear = document.getElementById('startYearSelect').value;
+    const startMonth = document.getElementById('startMonthSelect').value;
+    const startDate = this.value;
+    
+    if (startYear && startMonth && startDate) {
+      fetchAndPopulateStockDropdown(startYear, startMonth, startDate);
+    }
+  });
+
+  // Load stocks when end date is selected (if start date is already set)
+  document.getElementById('endDateSelect').addEventListener('change', function() {
+    const startYear = document.getElementById('startYearSelect').value;
+    const startMonth = document.getElementById('startMonthSelect').value;
+    const startDate = document.getElementById('startDateSelect').value;
+    
+    // Only try to populate stocks if start date is fully set
+    if (startYear && startMonth && startDate) {
+      fetchAndPopulateStockDropdown(startYear, startMonth, startDate);
+    }
+  });
+
+  // Update the loadTimelineBtn event listener
+  document.getElementById('loadTimelineBtn').addEventListener('click', function() {
+    const startYear = document.getElementById('startYearSelect').value;
+    const startMonth = document.getElementById('startMonthSelect').value;
+    const startDate = document.getElementById('startDateSelect').value;
+    const endYear = document.getElementById('endYearSelect').value;
+    const endMonth = document.getElementById('endMonthSelect').value;
+    const endDate = document.getElementById('endDateSelect').value;
+    
+    if (startYear && startMonth && startDate && endYear && endMonth && endDate) {
+      // Log what we're working with
+      console.log("Start date components:", startYear, startMonth, startDate);
+      console.log("End date components:", endYear, endMonth, endDate);
+      
+      // Load timeline data (it will check for selected stock internally)
+      loadTimelineData(startYear, startMonth, startDate, endYear, endMonth, endDate);
+    } else {
+      alert('Please select complete start and end dates');
+    }
+  });
+
+  // Load the initial years data
+  loadYears();
   
-  if (!startYear || !startMonth || !startDate) {
-    console.log('Cannot load stocks: start date not fully selected');
-    return;
-  }
-  
-  // Clear existing options first, keeping the first "All Stocks" option
-  const dropdown = document.getElementById('timelineStockSelect');
-  const allStocksOption = dropdown.options[0];
-  dropdown.innerHTML = '';
-  dropdown.appendChild(allStocksOption);
-  
-  // Get stocks from the first day's data to populate dropdown
+  // Also populate the timeline year dropdowns
+  fetch(`${FOLDER_PATH}/index.json`)
+    .then(response => response.json())
+    .then(data => {
+      populateTimelineDropdown('startYearSelect', data.items);
+      populateTimelineDropdown('endYearSelect', data.items);
+    })
+    .catch(error => console.error('Error loading years for timeline:', error));
+});
+
+/**
+ * Helper function to fetch and populate the timeline stock dropdown
+ */
+function fetchAndPopulateStockDropdown(year, month, date) {
   showLoading();
-  const filePath = `${FOLDER_PATH}/${startYear}/${startMonth}/${startDate}`;
+  const filePath = `${FOLDER_PATH}/${year}/${month}/${date}`;
   
   fetch(filePath)
     .then(response => {
@@ -1417,7 +1352,18 @@ function populateTimelineStockDropdown() {
     .then(data => {
       if (data && data.stocks) {
         const stockNames = Object.keys(data.stocks).sort();
+        const dropdown = document.getElementById('timelineStockSelect');
         
+        // Clear existing options
+        dropdown.innerHTML = '';
+        
+        // Add default empty option
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = '-- Select a Stock (Optional) --';
+        dropdown.appendChild(defaultOption);
+        
+        // Add stock options
         stockNames.forEach(stockName => {
           const option = document.createElement('option');
           option.value = stockName;
@@ -1437,52 +1383,6 @@ function populateTimelineStockDropdown() {
       hideLoading();
     });
 }
-
-// Update the loadTimelineBtn event listener
-document.getElementById('loadTimelineBtn').addEventListener('click', function() {
-  const startYear = document.getElementById('startYearSelect').value;
-  const startMonth = document.getElementById('startMonthSelect').value;
-  const startDate = document.getElementById('startDateSelect').value;
-  const endYear = document.getElementById('endYearSelect').value;
-  const endMonth = document.getElementById('endMonthSelect').value;
-  const endDate = document.getElementById('endDateSelect').value;
-  const selectedStock = document.getElementById('timelineStockSelect').value;
-  
-  if (startYear && startMonth && startDate && endYear && endMonth && endDate) {
-    // Log what we're working with
-    console.log("Start date components:", startYear, startMonth, startDate);
-    console.log("End date components:", endYear, endMonth, endDate);
-    if (selectedStock) {
-      console.log("Selected stock:", selectedStock);
-    }
-    
-    loadTimelineData(startYear, startMonth, startDate, endYear, endMonth, endDate, selectedStock);
-  } else {
-    alert('Please select complete start and end dates');
-  }
-});
-// Add event listeners for the start and end date selectors to populate the stock list
-// Add these after the other date select event listeners
-document.getElementById('startDateSelect').addEventListener('change', populateTimelineStockDropdown);
-document.getElementById('endDateSelect').addEventListener('change', function() {
-  // Only try to populate stocks if start date is fully set
-  if (document.getElementById('startDateSelect').value) {
-    populateTimelineStockDropdown();
-  }
-});
-      // Load the initial years data
-      loadYears();
-    });
-    // Add after loadYears() in the DOMContentLoaded event handler (around line 652)
-
-  // Also populate the timeline year dropdowns
-  fetch(`${FOLDER_PATH}/index.json`)
-    .then(response => response.json())
-    .then(data => {
-      populateTimelineDropdown('startYearSelect', data.items);
-      populateTimelineDropdown('endYearSelect', data.items);
-    })
-    .catch(error => console.error('Error loading years for timeline:', error));
   </script>
 </body>
 </html>
