@@ -26,6 +26,30 @@
   background-color: #f9f9f9;
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
+    /* Add to the style section in the head (around line 30) */
+.timeline-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background-color: #f0f0f0;
+  border-radius: 6px;
+}
+
+button {
+  padding: 0.5rem 1rem;
+  background-color: #3498db;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 1.5rem;
+}
+
+button:hover {
+  background-color: #2980b9;
+}
 
 canvas {
   width: 100% !important;
@@ -187,6 +211,43 @@ canvas {
     <p>Top 10 stocks by amount financed</p>
     <canvas id="stockChart"></canvas>
   </div>
+</div>
+
+  <!-- Add just before the closing </div> of the charts-section div (around line 217) -->
+<div class="chart-container" id="timelineAnalysisContainer">
+  <h3>Timeline Analysis</h3>
+  
+  <div class="timeline-controls">
+    <div class="control-group">
+      <label for="startYearSelect">Start Year:</label>
+      <select id="startYearSelect"></select>
+    </div>
+    <div class="control-group">
+      <label for="startMonthSelect">Start Month:</label>
+      <select id="startMonthSelect"></select>
+    </div>
+    <div class="control-group">
+      <label for="startDateSelect">Start Date:</label>
+      <select id="startDateSelect"></select>
+    </div>
+    <div class="control-group">
+      <label for="endYearSelect">End Year:</label>
+      <select id="endYearSelect"></select>
+    </div>
+    <div class="control-group">
+      <label for="endMonthSelect">End Month:</label>
+      <select id="endMonthSelect"></select>
+    </div>
+    <div class="control-group">
+      <label for="endDateSelect">End Date:</label>
+      <select id="endDateSelect"></select>
+    </div>
+    <div class="control-group">
+      <button id="loadTimelineBtn">Load Timeline</button>
+    </div>
+  </div>
+  
+  <canvas id="timelineChart"></canvas>
 </div>
 
   <script>
@@ -683,7 +744,196 @@ function createIndividualStockChart(stockName, stockData) {
     }
   });
 }
+// Add these functions near the end of the script, before the DOMContentLoaded event (around line 605)
 
+/**
+ * Loads data for the timeline across a date range
+ */
+async function loadTimelineData(startYear, startMonth, startDate, endYear, endMonth, endDate) {
+  console.log(`Loading timeline data from ${startYear}/${startMonth}/${startDate} to ${endYear}/${endMonth}/${endDate}`);
+  showLoading();
+  
+  try {
+    // Convert date strings to Date objects for comparison
+    const startDateObj = new Date(`${startYear}-${startMonth}-${startDate.replace('.json', '')}`);
+    const endDateObj = new Date(`${endYear}-${endMonth}-${endDate.replace('.json', '')}`);
+    
+    if (endDateObj < startDateObj) {
+      throw new Error('End date must be after start date');
+    }
+    
+    // Collect data for each date in the range
+    const timelineData = [];
+    
+    // Process date range
+    let currentDate = new Date(startDateObj);
+    
+    while (currentDate <= endDateObj) {
+      const year = currentDate.getFullYear().toString();
+      // Month is 1-based in UI but 0-based in JS Date
+      const month = (currentDate.getMonth() + 1).toString().padStart(2, '0');
+      const day = currentDate.getDate().toString().padStart(2, '0');
+      
+      const dateFile = `${day}.json`;
+      
+      try {
+        const filePath = `${FOLDER_PATH}/${year}/${month}/${dateFile}`;
+        const response = await fetch(filePath);
+        
+        if (response.ok) {
+          const data = await response.json();
+          
+          if (data && data.summary) {
+            timelineData.push({
+              date: `${year}-${month}-${day}`,
+              formattedDate: `${day}-${month}-${year}`,
+              data: data.summary
+            });
+          }
+        } else {
+          console.log(`No data available for ${filePath}`);
+        }
+      } catch (err) {
+        console.log(`Error fetching data for ${year}/${month}/${dateFile}: ${err.message}`);
+      }
+      
+      // Move to next day
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    // Sort timeline data by date
+    timelineData.sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    console.log(`Loaded ${timelineData.length} days of data for timeline`);
+    
+    if (timelineData.length > 0) {
+      createTimelineChart(timelineData);
+    } else {
+      throw new Error('No data found in the selected date range');
+    }
+    
+  } catch (error) {
+    console.error('Error loading timeline data:', error);
+    showError(`Failed to load timeline data: ${error.message}`);
+  } finally {
+    hideLoading();
+  }
+}
+
+/**
+ * Creates a timeline chart showing trends over the selected date range
+ */
+function createTimelineChart(timelineData) {
+  const ctx = document.getElementById('timelineChart');
+  
+  // Check if a chart instance already exists and destroy it
+  if (window.timelineChartInstance) {
+    window.timelineChartInstance.destroy();
+  }
+  
+  if (!timelineData || timelineData.length === 0) {
+    console.log('No timeline data available for chart');
+    return;
+  }
+  
+  // Prepare data for charting
+  const labels = timelineData.map(item => item.formattedDate);
+  
+  // Track all unique particulars across all days
+  const allParticulars = new Set();
+  timelineData.forEach(day => {
+    day.data.forEach(item => {
+      if (item.particular) {
+        allParticulars.add(item.particular);
+      }
+    });
+  });
+  
+  // Create datasets for each particular
+  const datasets = [];
+  const colors = [
+    'rgba(54, 162, 235, 1)',
+    'rgba(255, 99, 132, 1)',
+    'rgba(75, 192, 192, 1)',
+    'rgba(255, 159, 64, 1)',
+    'rgba(153, 102, 255, 1)',
+    'rgba(255, 205, 86, 1)',
+    'rgba(201, 203, 207, 1)'
+  ];
+  
+  Array.from(allParticulars).forEach((particular, index) => {
+    const data = timelineData.map(day => {
+      const summaryItem = day.data.find(item => item.particular === particular);
+      return summaryItem ? summaryItem.amount_crores : null;
+    });
+    
+    datasets.push({
+      label: particular,
+      data: data,
+      borderColor: colors[index % colors.length],
+      backgroundColor: colors[index % colors.length].replace('1)', '0.2)'),
+      fill: false,
+      tension: 0.1
+    });
+  });
+  
+  // Create chart
+  window.timelineChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: datasets
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: {
+          beginAtZero: false,
+          title: {
+            display: true,
+            text: 'Amount (Cr)'
+          }
+        },
+        x: {
+          title: {
+            display: true,
+            text: 'Date'
+          },
+          ticks: {
+            maxRotation: 45,
+            minRotation: 45
+          }
+        }
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return `${context.dataset.label}: ₹${context.parsed.y.toLocaleString()} Cr`;
+            }
+          }
+        },
+        legend: {
+          position: 'top',
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Helper function to populate any dropdown given an ID, specific to timeline controls
+ */
+function populateTimelineDropdown(id, items) {
+  const dropdown = document.getElementById(id);
+  dropdown.innerHTML = '<option value="">--Select--</option>';
+  
+  if (items && items.length > 0) {
+    items.forEach(item => {
+      dropdown.innerHTML += `<option value="${item}">${item}</option>`;
+    });
+  }
+}
     // Initialize when the DOM is fully loaded
     document.addEventListener('DOMContentLoaded', function() {
       console.log('Initializing MTF Data Dashboard...');
@@ -734,10 +984,118 @@ function createIndividualStockChart(stockName, stockData) {
       document.getElementById('stockInput').addEventListener('input', function() {
         displayStockDetails(this.value);
       });
+
+      // Add this code right before loadYears() in the DOMContentLoaded event handler (around line 650)
+
+  // Initialize timeline controls
+  document.getElementById('startYearSelect').addEventListener('change', function() {
+    const selectedYear = this.value;
+    
+    if (selectedYear) {
+      // Load months for the selected year
+      showLoading();
+      fetch(`${FOLDER_PATH}/${selectedYear}/index.json`)
+        .then(response => response.json())
+        .then(data => {
+          populateTimelineDropdown('startMonthSelect', data.items);
+          hideLoading();
+        })
+        .catch(error => {
+          console.error('Error loading months:', error);
+          hideLoading();
+        });
+    }
+  });
+  
+  document.getElementById('startMonthSelect').addEventListener('change', function() {
+    const selectedYear = document.getElementById('startYearSelect').value;
+    const selectedMonth = this.value;
+    
+    if (selectedYear && selectedMonth) {
+      // Load dates for the selected year/month
+      showLoading();
+      fetch(`${FOLDER_PATH}/${selectedYear}/${selectedMonth}/index.json`)
+        .then(response => response.json())
+        .then(data => {
+          const dateFiles = data.items.filter(file => file.endsWith('.json') && file !== 'index.json');
+          populateTimelineDropdown('startDateSelect', dateFiles);
+          hideLoading();
+        })
+        .catch(error => {
+          console.error('Error loading dates:', error);
+          hideLoading();
+        });
+    }
+  });
+  
+  document.getElementById('endYearSelect').addEventListener('change', function() {
+    const selectedYear = this.value;
+    
+    if (selectedYear) {
+      // Load months for the selected year
+      showLoading();
+      fetch(`${FOLDER_PATH}/${selectedYear}/index.json`)
+        .then(response => response.json())
+        .then(data => {
+          populateTimelineDropdown('endMonthSelect', data.items);
+          hideLoading();
+        })
+        .catch(error => {
+          console.error('Error loading months:', error);
+          hideLoading();
+        });
+    }
+  });
+  
+  document.getElementById('endMonthSelect').addEventListener('change', function() {
+    const selectedYear = document.getElementById('endYearSelect').value;
+    const selectedMonth = this.value;
+    
+    if (selectedYear && selectedMonth) {
+      // Load dates for the selected year/month
+      showLoading();
+      fetch(`${FOLDER_PATH}/${selectedYear}/${selectedMonth}/index.json`)
+        .then(response => response.json())
+        .then(data => {
+          const dateFiles = data.items.filter(file => file.endsWith('.json') && file !== 'index.json');
+          populateTimelineDropdown('endDateSelect', dateFiles);
+          hideLoading();
+        })
+        .catch(error => {
+          console.error('Error loading dates:', error);
+          hideLoading();
+        });
+    }
+  });
+  
+  document.getElementById('loadTimelineBtn').addEventListener('click', function() {
+    const startYear = document.getElementById('startYearSelect').value;
+    const startMonth = document.getElementById('startMonthSelect').value;
+    const startDate = document.getElementById('startDateSelect').value;
+    const endYear = document.getElementById('endYearSelect').value;
+    const endMonth = document.getElementById('endMonthSelect').value;
+    const endDate = document.getElementById('endDateSelect').value;
+    
+    if (startYear && startMonth && startDate && endYear && endMonth && endDate) {
+      loadTimelineData(startYear, startMonth, startDate, endYear, endMonth, endDate);
+    } else {
+      alert('Please select complete start and end dates');
+    }
+  });
       
       // Load the initial years data
       loadYears();
     });
+    // Add after loadYears() in the DOMContentLoaded event handler (around line 652)
+
+  // Also populate the timeline year dropdowns
+  fetch(`${FOLDER_PATH}/index.json`)
+    .then(response => response.json())
+    .then(data => {
+      populateTimelineDropdown('startYearSelect', data.items);
+      populateTimelineDropdown('endYearSelect', data.items);
+    })
+    .catch(error => console.error('Error loading years for timeline:', error));
   </script>
 </body>
 </html>
