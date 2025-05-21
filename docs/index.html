@@ -304,40 +304,56 @@ canvas {
     /**
      * Fetches and parses an index.json file
      */
-    async function fetchIndexJson(path) {
-      showLoading();
-      try {
-        const response = await fetch(`${path}/index.json`);
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        console.log(`Index data for ${path}:`, data);
-        
-        if (!data.items || !Array.isArray(data.items)) {
-          throw new Error('Invalid index.json format - missing items array');
-        }
-        
-        return data.items;
-      } catch (error) {
-        console.error(`Failed to fetch index.json from ${path}:`, error);
-        showError(`Could not load directory listing: ${error.message}`);
-        return [];
-      } finally {
-        hideLoading();
-      }
+   async function fetchIndexJson(path) {
+  showLoading();
+  try {
+    console.log(`Fetching index from: ${path}/index.json`);
+    const response = await fetch(`${path}/index.json`);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
     }
+    
+    const data = await response.json();
+    console.log(`Index data for ${path}:`, data);
+    
+    if (!data.items || !Array.isArray(data.items)) {
+      throw new Error('Invalid index.json format - missing items array');
+    }
+    
+    return data.items;
+  } catch (error) {
+    console.error(`Failed to fetch index.json from ${path}:`, error);
+    showError(`Could not load directory listing: ${error.message}`);
+    return [];
+  } finally {
+    hideLoading();
+  }
+}
 
     /**
      * Updates the years dropdown with available years
      */
     async function loadYears() {
-      console.log('Loading years...');
-      const years = await fetchIndexJson(FOLDER_PATH);
+  console.log('Loading years...');
+  try {
+    // Test if the base folder path exists
+    const testResponse = await fetch(`${FOLDER_PATH}/index.json`);
+    if (!testResponse.ok) {
+      throw new Error(`Cannot access ${FOLDER_PATH}/index.json - Check if folder path is correct`);
+    }
+    
+    const years = await fetchIndexJson(FOLDER_PATH);
+    if (years.length === 0) {
+      showError(`No data found in ${FOLDER_PATH} folder. Check folder structure.`);
+    } else {
       populateDropdown('yearSelect', years);
     }
+  } catch (error) {
+    console.error('Error loading years:', error);
+    showError(`Data loading error: ${error.message}. Check console for details.`);
+  }
+}
 
     /**
      * Updates the months dropdown based on selected year
@@ -759,7 +775,6 @@ function createIndividualStockChart(stockName, stockData) {
 /**
  * Loads data for the timeline across a date range
  */
-// Update the loadTimelineData function (around line 688) to include stock tracking
 async function loadTimelineData(startYear, startMonth, startDate, endYear, endMonth, endDate) {
   console.log(`Loading timeline data from ${startYear}/${startMonth}/${startDate} to ${endYear}/${endMonth}/${endDate}`);
   showLoading();
@@ -794,6 +809,9 @@ async function loadTimelineData(startYear, startMonth, startDate, endYear, endMo
     
     // First, get all available years
     const yearsResponse = await fetch(`${FOLDER_PATH}/index.json?_cache=${new Date().getTime()}`);
+    if (!yearsResponse.ok) {
+      throw new Error('Failed to fetch years. Check if your data path is correct.');
+    }
     const yearsData = await yearsResponse.json();
     const availableYears = yearsData.items;
     
@@ -1298,14 +1316,14 @@ document.getElementById('loadTimelineBtn').addEventListener('click', function() 
   const endMonth = document.getElementById('endMonthSelect').value;
   const endDate = document.getElementById('endDateSelect').value;
   
+  console.log("Timeline button clicked");
+  console.log("Selected values:", { startYear, startMonth, startDate, endYear, endMonth, endDate });
+  
   if (startYear && startMonth && startDate && endYear && endMonth && endDate) {
-    // Log exactly what we're working with
-    console.log("Start date components:", startYear, startMonth, startDate);
-    console.log("End date components:", endYear, endMonth, endDate);
-    
     loadTimelineData(startYear, startMonth, startDate, endYear, endMonth, endDate);
   } else {
     alert('Please select complete start and end dates');
+    console.log("Missing timeline selection values");
   }
 });
       
