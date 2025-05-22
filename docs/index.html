@@ -157,6 +157,49 @@ canvas {
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <h1>MTF Data Search</h1>
 
+  <!-- Timeline Analysis Section - Moved to Top -->
+  <div class="chart-container" id="timelineAnalysisContainer">
+    <h3>Timeline Analysis</h3>
+    
+    <div class="timeline-controls">
+    <div class="control-group">
+      <label for="startYearSelect">Start Year:</label>
+      <select id="startYearSelect"></select>
+    </div>
+    <div class="control-group">
+      <label for="startMonthSelect">Start Month:</label>
+      <select id="startMonthSelect"></select>
+    </div>
+    <div class="control-group">
+      <label for="startDateSelect">Start Date (Optional):</label>
+      <select id="startDateSelect"></select>
+    </div>
+    <div class="control-group">
+      <label for="endYearSelect">End Year:</label>
+      <select id="endYearSelect"></select>
+    </div>
+    <div class="control-group">
+      <label for="endMonthSelect">End Month:</label>
+      <select id="endMonthSelect"></select>
+    </div>
+    <div class="control-group">
+      <label for="endDateSelect">End Date (Optional):</label>
+      <select id="endDateSelect"></select>
+    </div>
+    <div class="control-group">
+      <label for="timelineStockSelect">Filter Stock (Optional):</label>
+      <select id="timelineStockSelect">
+        <option value="">All Stocks</option>
+      </select>
+    </div>
+    <div class="control-group">
+      <button id="loadTimelineBtn">Load Timeline</button>
+    </div>
+    </div>
+    
+    <canvas id="timelineChart"></canvas>
+  </div>
+
   <div class="controls">
     <div class="control-group">
       <label for="yearSelect">Year:</label>
@@ -212,50 +255,6 @@ canvas {
     <canvas id="stockChart"></canvas>
   </div>
 </div>
-
-  <!-- Add just before the closing </div> of the charts-section div (around line 217) -->
-<div class="chart-container" id="timelineAnalysisContainer">
-  <h3>Timeline Analysis</h3>
-  
-  <div class="timeline-controls">
-  <div class="control-group">
-    <label for="startYearSelect">Start Year:</label>
-    <select id="startYearSelect"></select>
-  </div>
-  <div class="control-group">
-    <label for="startMonthSelect">Start Month:</label>
-    <select id="startMonthSelect"></select>
-  </div>
-  <div class="control-group">
-    <label for="startDateSelect">Start Date (Optional):</label>
-    <select id="startDateSelect"></select>
-  </div>
-  <div class="control-group">
-    <label for="endYearSelect">End Year:</label>
-    <select id="endYearSelect"></select>
-  </div>
-  <div class="control-group">
-    <label for="endMonthSelect">End Month:</label>
-    <select id="endMonthSelect"></select>
-  </div>
-  <div class="control-group">
-    <label for="endDateSelect">End Date (Optional):</label>
-    <select id="endDateSelect"></select>
-  </div>
-  <div class="control-group">
-    <label for="timelineStockSelect">Filter Stock (Optional):</label>
-    <select id="timelineStockSelect">
-      <option value="">All Stocks</option>
-    </select>
-  </div>
-  <div class="control-group">
-    <button id="loadTimelineBtn">Load Timeline</button>
-  </div>
-  </div>
-  
-  <canvas id="timelineChart"></canvas>
-</div>
-
   <script>
     // Configuration
     const FOLDER_PATH = 'output_data1';
