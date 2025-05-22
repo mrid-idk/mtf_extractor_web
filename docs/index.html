@@ -1057,9 +1057,116 @@ function createTimelineChart(timelineData) {
 }
 
 /**
+ * Creates a timeline chart showing trends over the selected date range
+ */
+function createTimelineChart(timelineData) {
+  const ctx = document.getElementById('timelineChart');
+  
+  // Check if a chart instance already exists and destroy it
+  if (window.timelineChartInstance) {
+    window.timelineChartInstance.destroy();
+  }
+
+// Debug: Confirm functions are loaded
+console.log('Timeline chart functions loaded successfully');
+console.log('createTimelineChart defined:', typeof createTimelineChart);
+console.log('createStockTimelineChart defined:', typeof createStockTimelineChart);
+  
+  if (!timelineData || timelineData.length === 0) {
+    console.log('No timeline data available for chart');
+    return;
+  }
+  
+  // Prepare data for charting
+  const labels = timelineData.map(item => item.formattedDate);
+  
+  // Track all unique particulars across all days
+  const allParticulars = new Set();
+  timelineData.forEach(day => {
+    day.data.forEach(item => {
+      if (item.particular) {
+        allParticulars.add(item.particular);
+      }
+    });
+  });
+  
+  // Create datasets for each particular
+  const datasets = [];
+  const colors = [
+    'rgba(54, 162, 235, 1)',
+    'rgba(255, 99, 132, 1)',
+    'rgba(75, 192, 192, 1)',
+    'rgba(255, 159, 64, 1)',
+    'rgba(153, 102, 255, 1)',
+    'rgba(255, 205, 86, 1)',
+    'rgba(201, 203, 207, 1)'
+  ];
+  
+  Array.from(allParticulars).forEach((particular, index) => {
+    const data = timelineData.map(day => {
+      const summaryItem = day.data.find(item => item.particular === particular);
+      return summaryItem ? summaryItem.amount_crores : null;
+    });
+    
+    datasets.push({
+      label: particular,
+      data: data,
+      borderColor: colors[index % colors.length],
+      backgroundColor: colors[index % colors.length].replace('1)', '0.2)'),
+      fill: false,
+      tension: 0.1
+    });
+  });
+  
+  // Create chart
+  window.timelineChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: datasets
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: {
+          beginAtZero: false,
+          title: {
+            display: true,
+            text: 'Amount (Cr)'
+          }
+        },
+        x: {
+          title: {
+            display: true,
+            text: 'Date'
+          },
+          ticks: {
+            maxRotation: 45,
+            minRotation: 45
+          }
+        }
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return `${context.dataset.label}: ₹${context.parsed.y.toLocaleString()} Cr`;
+            }
+          }
+        },
+        legend: {
+          position: 'top',
+        }
+      }
+    }
+  });
+}
+
+/**
  * Creates a timeline chart for a specific stock
  */
 function createStockTimelineChart(stockTimelineData, stockName) {
+  console.log('createStockTimelineChart function called with:', stockName);
   const ctx = document.getElementById('timelineChart');
   
   // Check if a chart instance already exists and destroy it
