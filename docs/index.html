@@ -876,68 +876,114 @@ async function loadTimelineData(startYear, startMonth, startDate, endYear, endMo
               });
             }
             
-           if (selectedStock && data && data.stocks && data.stocks[selectedStock]) {
-              // If specific stock is selected and exists in this date's data
-              console.log(`Found data for stock ${selectedStock} on ${year}-${month}-${day}: Amount = ${data.stocks[selectedStock].Amount_in_crores}`);
-              stockTimelineData.push({
-                date: `${year}-${month}-${day}`,
-                formattedDate: `${day}-${month}-${year}`,
-                amount: data.stocks[selectedStock].Amount_in_crores || 0
-              });
-              successCount++;
-            } else if (selectedStock && data && data.stocks) {
-              // Log what stocks are available on this date for debugging
-              const availableStocks = Object.keys(data.stocks);
-              console.log(`Stock ${selectedStock} not found on ${year}-${month}-${day}. Available stocks: ${availableStocks.slice(0, 5).join(', ')}${availableStocks.length > 5 ? '...' : ''}`);
+// Add this helper function before your existing logic
+function findMatchingStock(selectedStock, stocksData) {
+  if (!stocksData || !selectedStock) return null;
+  
+  // Try exact match first
+  if (stocksData[selectedStock]) {
+    return { key: selectedStock, data: stocksData[selectedStock] };
+  }
+  
+  // Try case-insensitive match
+  const stockKeys = Object.keys(stocksData);
+  const lowerSelectedStock = selectedStock.toLowerCase();
+  
+  const matchedKey = stockKeys.find(key => key.toLowerCase() === lowerSelectedStock);
+  if (matchedKey) {
+    return { key: matchedKey, data: stocksData[matchedKey] };
+  }
+  
+  return null;
+}
+
+// Complete timeline data processing block
+for (let year = startYear; year <= endYear; year++) {
+  const monthStart = (year === startYear) ? startMonth : 1;
+  const monthEnd = (year === endYear) ? endMonth : 12;
+  
+  for (let month = monthStart; month <= monthEnd; month++) {
+    const dateStart = (year === startYear && month === startMonth) ? parseInt(startDate.replace('.json', '')) : 1;
+    const dateEnd = (year === endYear && month === endMonth) ? parseInt(endDate.replace('.json', '')) : new Date(year, month, 0).getDate();
+    
+    for (let day = dateStart; day <= dateEnd; day++) {
+      const dateFile = `${day}.json`;
+      const filePath = `${year}/${month}/${dateFile}`;
+      
+      try {
+        const data = JSON.parse(window.fs.readFile(filePath, { encoding: 'utf8' }));
+        
+        if (selectedStock && data && data.stocks) {
+          const stockMatch = findMatchingStock(selectedStock, data.stocks);
+          
+          if (stockMatch) {
+            // If specific stock is selected and exists in this date's data
+            console.log(`Found data for stock ${stockMatch.key} on ${year}-${month}-${day}: Amount = ${stockMatch.data.Amount_in_crores}`);
+            stockTimelineData.push({
+              date: `${year}-${month}-${day}`,
+              formattedDate: `${day}-${month}-${year}`,
+              amount: stockMatch.data.Amount_in_crores || 0
+            });
+            successCount++;
+          } else {
+            // Log what stocks are available on this date for debugging
+            const availableStocks = Object.keys(data.stocks);
+            console.log(`Stock ${selectedStock} not found on ${year}-${month}-${day}. Available stocks: ${availableStocks.slice(0, 5).join(', ')}${availableStocks.length > 5 ? '...' : ''}`);
+            
+            // Debug: Show first few stock names to help identify the correct format
+            if (availableStocks.length > 0) {
+              console.log(`Sample stock names from this date:`, availableStocks.slice(0, 10));
             }
-            else if (!selectedStock && data && data.summary && data.summary.length > 0) {
-              console.log(`Found data for ${year}-${month}-${day}`);
-              timelineData.push({
-                date: `${year}-${month}-${day}`,
-                formattedDate: `${day}-${month}-${year}`,
-                data: data.summary
-              });
-              successCount++;
-            } else {
-              console.log(`No summary data in file at ${filePath}`);
-              failCount++;
-            }
-          } catch (err) {
-            console.log(`Error processing ${year}/${month}/${dateFile}: ${err.message}`);
-            failCount++;
           }
+        } else if (!selectedStock && data && data.summary && data.summary.length > 0) {
+          console.log(`Found data for ${year}-${month}-${day}`);
+          timelineData.push({
+            date: `${year}-${month}-${day}`,
+            formattedDate: `${day}-${month}-${year}`,
+            data: data.summary
+          });
+          successCount++;
+        } else {
+          console.log(`No summary data in file at ${filePath}`);
+          failCount++;
         }
+      } catch (err) {
+        console.log(`Error processing ${year}/${month}/${dateFile}: ${err.message}`);
+        failCount++;
       }
     }
-    
-    // Update the timeline stock filter with newly discovered stocks
-    updateTimelineStockFilter();
-    
-    console.log(`Timeline data load complete: ${successCount} successful, ${failCount} failed`);
-    
-    if (selectedStock && stockTimelineData.length > 0) {
-      // Sort by date and create stock-specific timeline
-      stockTimelineData.sort((a, b) => new Date(a.date) - new Date(b.date));
-      createStockTimelineChart(stockTimelineData, selectedStock);
-    } else if (!selectedStock && timelineData.length > 0) {
-      // Sort timeline data by date for regular summary view
-      timelineData.sort((a, b) => new Date(a.date) - new Date(b.date));
-      createTimelineChart(timelineData);
-    } else {
-      // Clear any existing chart
-      if (window.timelineChartInstance) {
-        window.timelineChartInstance.destroy();
-      }
-      
-      const errorMessage = selectedStock ? 
-        `No data found for stock "${selectedStock}" in the selected date range.` : 
-        `No data found in the selected date range.`;
-      
-      const dateRangeText = startDate && endDate ? 
-        `between ${new Date(`${startYear}-${startMonth}-${startDate.replace('.json', '')}`).toDateString()} and ${new Date(`${endYear}-${endMonth}-${endDate.replace('.json', '')}`).toDateString()}` :
-        `between ${startMonth}/${startYear} and ${endMonth}/${endYear}`;
-      
-      // Show user-friendly message instead of throwing error
+  }
+}
+
+// Update the timeline stock filter with newly discovered stocks
+updateTimelineStockFilter();
+
+console.log(`Timeline data load complete: ${successCount} successful, ${failCount} failed`);
+
+if (selectedStock && stockTimelineData.length > 0) {
+  // Sort by date and create stock-specific timeline
+  stockTimelineData.sort((a, b) => new Date(a.date) - new Date(b.date));
+  createStockTimelineChart(stockTimelineData, selectedStock);
+} else if (!selectedStock && timelineData.length > 0) {
+  // Sort timeline data by date for regular summary view
+  timelineData.sort((a, b) => new Date(a.date) - new Date(b.date));
+  createTimelineChart(timelineData);
+} else {
+  // Clear any existing chart
+  if (window.timelineChartInstance) {
+    window.timelineChartInstance.destroy();
+  }
+  
+  const errorMessage = selectedStock ? 
+    `No data found for stock "${selectedStock}" in the selected date range.` : 
+    `No data found in the selected date range.`;
+  
+  const dateRangeText = startDate && endDate ? 
+    `between ${new Date(`${startYear}-${startMonth}-${startDate.replace('.json', '')}`).toDateString()} and ${new Date(`${endYear}-${endMonth}-${endDate.replace('.json', '')}`).toDateString()}` :
+    `between ${startMonth}/${startYear} and ${endMonth}/${endYear}`;
+  
+  console.log(`${errorMessage}\nDate range: ${dateRangeText}\nFiles processed: ${successCount + failCount} (${successCount} successful, ${failCount} failed)\nTry selecting a wider date range or a different stock.`);
+}
       const summaryList = document.getElementById('summaryList');
       summaryList.innerHTML = `<li style="color: #e67e22; font-weight: bold;">${errorMessage}</li>
                               <li>Date range: ${dateRangeText}</li>
