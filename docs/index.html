@@ -784,13 +784,16 @@ function createIndividualStockChart(stockName, stockData) {
  * Loads data for the timeline across a date range
  */
 /**
+ /**
  * Loads data for the timeline across a date range - Modified to handle optional dates
  */
 async function loadTimelineData(startYear, startMonth, startDate, endYear, endMonth, endDate, selectedStock) {
   console.log(`Loading timeline data from ${startYear}/${startMonth}${startDate ? '/' + startDate : ''} to ${endYear}/${endMonth}${endDate ? '/' + endDate : ''}`);
+  
   if (selectedStock) {
     console.log(`Filtering for stock: ${selectedStock}`);
   }
+  
   showLoading();
   
   try {
@@ -798,49 +801,45 @@ async function loadTimelineData(startYear, startMonth, startDate, endYear, endMo
     const timelineData = [];
     let successCount = 0;
     let failCount = 0;
-    
     // First, get all available years
     const yearsResponse = await fetch(`${FOLDER_PATH}/index.json`);
     const yearsData = await yearsResponse.json();
     const availableYears = yearsData.items;
-    
+
     // For specific stock tracking
     const stockTimelineData = [];
-    
+
     for (const year of availableYears) {
       // Skip years outside our range
       if (year < startYear || year > endYear) continue;
-      
+
       // Get months for this year
       const monthsResponse = await fetch(`${FOLDER_PATH}/${year}/index.json`);
       if (!monthsResponse.ok) {
         console.log(`Could not load months for year ${year}`);
         continue;
       }
-      
       const monthsData = await monthsResponse.json();
       const availableMonths = monthsData.items;
-      
+
       for (const month of availableMonths) {
         // Skip months outside our range
-        if ((year === startYear && month < startMonth) || 
-            (year === endYear && month > endMonth)) {
+        if ((year === startYear && month < startMonth) || (year === endYear && month > endMonth)) {
           continue;
         }
-        
+
         // Get dates for this month
         const datesResponse = await fetch(`${FOLDER_PATH}/${year}/${month}/index.json`);
         if (!datesResponse.ok) {
           console.log(`Could not load dates for ${year}/${month}`);
           continue;
         }
-        
         const datesData = await datesResponse.json();
         const availableDates = datesData.items.filter(file => file.endsWith('.json') && file !== 'index.json');
-        
+
         for (const dateFile of availableDates) {
           const day = dateFile.replace('.json', '');
-          
+
           // If specific dates are provided, filter by them
           if (startDate && endDate) {
             const startDay = startDate.replace('.json', '');
@@ -848,39 +847,81 @@ async function loadTimelineData(startYear, startMonth, startDate, endYear, endMo
             const currentDate = new Date(`${year}-${month}-${day}`);
             const startDateObj = new Date(`${startYear}-${startMonth}-${startDay}`);
             const endDateObj = new Date(`${endYear}-${endMonth}-${endDay}`);
-            
+
             // Skip dates outside our range
             if (currentDate < startDateObj || currentDate > endDateObj) {
               continue;
             }
           }
-          
+
           // Fetch data for this specific date
           try {
             const filePath = `${FOLDER_PATH}/${year}/${month}/${dateFile}`;
             console.log(`Attempting to fetch: ${filePath}`);
-            
             const response = await fetch(filePath);
-            
             if (!response.ok) {
               console.log(`No data available at ${filePath}`);
               failCount++;
               continue;
             }
-            
             const data = await response.json();
-            
+
             // Add stocks to available timeline stocks for future filtering
             if (data && data.stocks) {
               Object.keys(data.stocks).forEach(stock => {
                 availableTimelineStocks.add(stock);
               });
             }
-            
-// Add this helper function before your existing logic
+
+            if (selectedStock && data && data.stocks) {
+              const stockMatch = findMatchingStock(selectedStock, data.stocks);
+
+              if (stockMatch) {
+                console.log(`Found data for stock ${stockMatch.key} on ${year}-${month}-${day}: Amount = ${stockMatch.data.Amount_in_crores}`);
+                stockTimelineData.push({
+                  date: `${year}-${month}-${day}`,
+                  formattedDate: `${day}-${month}-${year}`,
+                  amount: stockMatch.data.Amount_in_crores || 0
+                });
+                successCount++;
+              } else {
+                const availableStocks = Object.keys(data.stocks);
+                console.log(`Stock ${selectedStock} not found on ${year}-${month}-${day}. Available stocks: ${availableStocks.slice(0, 5).join(', ')}${availableStocks.length > 5 ? '...' : ''}`);
+                if (availableStocks.length > 0) {
+                  console.log(`Sample stock names from this date:`, availableStocks.slice(0, 10));
+                }
+              }
+            } else if (!selectedStock && data && data.summary && data.summary.length > 0) {
+              console.log(`Found data for ${year}-${month}-${day}`);
+              timelineData.push({
+                date: `${year}-${month}-${day}`,
+                formattedDate: `${day}-${month}-${year}`,
+                data: data.summary
+              });
+              successCount++;
+            } else {
+              console.log(`No summary data in file at ${filePath}`);
+              failCount++;
+            }
+          } catch (err) {
+            console.log(`Error processing ${year}/${month}/${dateFile}: ${err.message}`);
+            failCount++;
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error loading timeline data:', error);
+    showError(`Failed to load timeline data: ${error.message}`);
+  } finally {
+    hideLoading();
+  }
+}
+
+// Add this helper function just before the main logic
 function findMatchingStock(selectedStock, stocksData) {
   if (!stocksData || !selectedStock) return null;
-  
+
   // Try exact match first
   if (stocksData[selectedStock]) {
     return { key: selectedStock, data: stocksData[selectedStock] };
@@ -889,73 +930,14 @@ function findMatchingStock(selectedStock, stocksData) {
   // Try case-insensitive match
   const stockKeys = Object.keys(stocksData);
   const lowerSelectedStock = selectedStock.toLowerCase();
-  
   const matchedKey = stockKeys.find(key => key.toLowerCase() === lowerSelectedStock);
+
   if (matchedKey) {
     return { key: matchedKey, data: stocksData[matchedKey] };
   }
-  
+
   return null;
 }
-
-// Complete timeline data processing block
-for (let year = startYear; year <= endYear; year++) {
-  const monthStart = (year === startYear) ? startMonth : 1;
-  const monthEnd = (year === endYear) ? endMonth : 12;
-  
-  for (let month = monthStart; month <= monthEnd; month++) {
-    const dateStart = (year === startYear && month === startMonth) ? parseInt(startDate.replace('.json', '')) : 1;
-    const dateEnd = (year === endYear && month === endMonth) ? parseInt(endDate.replace('.json', '')) : new Date(year, month, 0).getDate();
-    
-    for (let day = dateStart; day <= dateEnd; day++) {
-      const dateFile = `${day}.json`;
-      const filePath = `${year}/${month}/${dateFile}`;
-      
-      try {
-        const data = JSON.parse(window.fs.readFile(filePath, { encoding: 'utf8' }));
-        
-        if (selectedStock && data && data.stocks) {
-          const stockMatch = findMatchingStock(selectedStock, data.stocks);
-          
-          if (stockMatch) {
-            // If specific stock is selected and exists in this date's data
-            console.log(`Found data for stock ${stockMatch.key} on ${year}-${month}-${day}: Amount = ${stockMatch.data.Amount_in_crores}`);
-            stockTimelineData.push({
-              date: `${year}-${month}-${day}`,
-              formattedDate: `${day}-${month}-${year}`,
-              amount: stockMatch.data.Amount_in_crores || 0
-            });
-            successCount++;
-          } else {
-            // Log what stocks are available on this date for debugging
-            const availableStocks = Object.keys(data.stocks);
-            console.log(`Stock ${selectedStock} not found on ${year}-${month}-${day}. Available stocks: ${availableStocks.slice(0, 5).join(', ')}${availableStocks.length > 5 ? '...' : ''}`);
-            
-            // Debug: Show first few stock names to help identify the correct format
-            if (availableStocks.length > 0) {
-              console.log(`Sample stock names from this date:`, availableStocks.slice(0, 10));
-            }
-          }
-        } else if (!selectedStock && data && data.summary && data.summary.length > 0) {
-          console.log(`Found data for ${year}-${month}-${day}`);
-          timelineData.push({
-            date: `${year}-${month}-${day}`,
-            formattedDate: `${day}-${month}-${year}`,
-            data: data.summary
-          });
-          successCount++;
-        } else {
-          console.log(`No summary data in file at ${filePath}`);
-          failCount++;
-        }
-      } catch (err) {
-        console.log(`Error processing ${year}/${month}/${dateFile}: ${err.message}`);
-        failCount++;
-      }
-    }
-  }
-}
-
 // Update the timeline stock filter with newly discovered stocks
 updateTimelineStockFilter();
 
