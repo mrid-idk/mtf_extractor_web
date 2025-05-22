@@ -876,14 +876,19 @@ async function loadTimelineData(startYear, startMonth, startDate, endYear, endMo
               });
             }
             
-            if (selectedStock && data && data.stocks && data.stocks[selectedStock]) {
+           if (selectedStock && data && data.stocks && data.stocks[selectedStock]) {
               // If specific stock is selected and exists in this date's data
+              console.log(`Found data for stock ${selectedStock} on ${year}-${month}-${day}: Amount = ${data.stocks[selectedStock].Amount_in_crores}`);
               stockTimelineData.push({
                 date: `${year}-${month}-${day}`,
                 formattedDate: `${day}-${month}-${year}`,
                 amount: data.stocks[selectedStock].Amount_in_crores || 0
               });
               successCount++;
+            } else if (selectedStock && data && data.stocks) {
+              // Log what stocks are available on this date for debugging
+              const availableStocks = Object.keys(data.stocks);
+              console.log(`Stock ${selectedStock} not found on ${year}-${month}-${day}. Available stocks: ${availableStocks.slice(0, 5).join(', ')}${availableStocks.length > 5 ? '...' : ''}`);
             }
             else if (!selectedStock && data && data.summary && data.summary.length > 0) {
               console.log(`Found data for ${year}-${month}-${day}`);
@@ -919,6 +924,11 @@ async function loadTimelineData(startYear, startMonth, startDate, endYear, endMo
       timelineData.sort((a, b) => new Date(a.date) - new Date(b.date));
       createTimelineChart(timelineData);
     } else {
+      // Clear any existing chart
+      if (window.timelineChartInstance) {
+        window.timelineChartInstance.destroy();
+      }
+      
       const errorMessage = selectedStock ? 
         `No data found for stock "${selectedStock}" in the selected date range.` : 
         `No data found in the selected date range.`;
@@ -927,7 +937,14 @@ async function loadTimelineData(startYear, startMonth, startDate, endYear, endMo
         `between ${new Date(`${startYear}-${startMonth}-${startDate.replace('.json', '')}`).toDateString()} and ${new Date(`${endYear}-${endMonth}-${endDate.replace('.json', '')}`).toDateString()}` :
         `between ${startMonth}/${startYear} and ${endMonth}/${endYear}`;
       
-      throw new Error(`${errorMessage} Attempted to load data ${dateRangeText}`);
+      // Show user-friendly message instead of throwing error
+      const summaryList = document.getElementById('summaryList');
+      summaryList.innerHTML = `<li style="color: #e67e22; font-weight: bold;">${errorMessage}</li>
+                              <li>Date range: ${dateRangeText}</li>
+                              <li>Files processed: ${successCount + failCount} (${successCount} successful, ${failCount} failed)</li>
+                              <li style="color: #3498db;">Try selecting a wider date range or a different stock.</li>`;
+      
+      console.log(`${errorMessage} Date range: ${dateRangeText}`);
     }
     
   } catch (error) {
@@ -967,7 +984,6 @@ function createTimelineChart(timelineData) {
     });
   });
 
-/**
 /**
  * Creates a timeline chart for a specific stock
  */
