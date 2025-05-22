@@ -1145,6 +1145,15 @@ function populateTimelineDropdown(id, items) {
   while (dropdown.children.length > 1) {
     dropdown.removeChild(dropdown.lastChild);
   }
+  
+  // Add new options
+  items.forEach(item => {
+    const option = document.createElement('option');
+    option.value = item.value || item;
+    option.textContent = item.text || item;
+    dropdown.appendChild(option);
+  });
+}
     // Initialize when the DOM is fully loaded
     document.addEventListener('DOMContentLoaded', function() {
       console.log('Initializing MTF Data Dashboard...');
